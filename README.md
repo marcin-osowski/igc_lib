@@ -4,5 +4,5 @@ The code is not pretty but has been tested against a couple hundread
 thousand IGC files. Example usage:
 
 ```
-  python igc\_lib.py some\_file.igc
+  python igc_lib.py some_file.igc
 ```
