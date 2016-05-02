@@ -599,8 +599,6 @@ if __name__ == "__main__":
 
     flight = Flight.create_from_file(sys.argv[1])
     print "flight =", flight
-
-    import ipdb
-    ipdb.set_trace()
-    print "Done"
+    print "fixes[0] =", flight.fixes[0]
+    print "thermals[0] =", flight.thermals[0]
 
