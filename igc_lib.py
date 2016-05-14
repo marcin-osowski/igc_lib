@@ -2,6 +2,7 @@
 import math
 import re
 import datetime
+import collections
 from Bio.Alphabet import Alphabet
 from Bio.HMM.MarkovModel import MarkovModelBuilder
 
@@ -45,14 +46,38 @@ def rawtime_float_to_hms(timef):
     """Converts time from floating point seconds to hours/minutes/seconds.
     
     Args:
-        timef: a float, duration in seconds.
-
+        timef: A floating point time in seconds to be converted
+        
     Returns:
-        A size 3 tuple of integers, hours, minutes and seconds.
+        A namedtuple with hours, minutes and seconds elements
     """
     time = int(round(timef))
-    return (time/3600), (time%3600)/60, time%60
+    hms = collections.namedtuple('hms', ['hours', 'minutes', 'seconds'])
+    
+    return hms((time/3600), (time%3600)/60, time%60)
 
+def degrees_float_to_degrees_minutes_seconds(dd):
+    """Converts time from floating point degrees to degrees/minutes/floating point seconds.
+    
+    Args:
+        dd: Floating point degrees to be converted
+        
+    Returns:
+        A namedtuple with degrees, minutes and floating point seconds elements
+    """
+    ddmmss = collections.namedtuple('ddmmss', ['degrees', 'minutes', 'seconds'])
+    negative = dd < 0
+    dd = abs(dd)
+    minutes,seconds = divmod(dd*3600,60)
+    degrees,minutes = divmod(minutes,60)
+    if negative:
+        if degrees > 0:
+            degrees = -degrees
+        elif minutes > 0:
+            minutes = -minutes
+        else:
+            seconds = -seconds
+    return ddmmss(degrees,minutes,seconds)
 
 class GNSSFix:
     """Stores single GNSS flight recorder fix (a B-record).
@@ -229,7 +254,42 @@ class Thermal:
     def __str__(self):
         return ("Thermal(vertical_velocity=%.2f [m/s], enter=%s, exit=%s)" %
                      (self.vertical_velocity(), str(self.enter_fix), str(self.exit_fix)))
+    
+class Glide:
 
+    def __init__(self, enter_fix, exit_fix, track_length):
+        self.enter_fix = enter_fix
+        self.exit_fix = exit_fix
+        self.track_length = track_length
+
+    def rawtime_change(self):
+        return self.exit_fix.rawtime - self.enter_fix.rawtime
+                               
+    def speed(self):
+        return self.track_length / (self.rawtime_change() / 3600.0)
+       
+    
+    def alt_change(self):
+        return self.enter_fix.alt - self.exit_fix.alt 
+                               
+    def glide_ratio(self):
+        if math.fabs(self.rawtime_change()) < 1e-7:
+            return 0.0
+        return (self.track_length * 1000.0) / self.alt_change()
+    
+    def duration(self):
+        hms = rawtime_float_to_hms(self.rawtime_change())
+        return ("%d m %d s" % (hms.minutes, hms.seconds))
+        
+
+    
+    def __repr__(self):
+        return self.__str__()
+ 
+    def __str__(self):
+        return ("Glide (distance=%.2f km, speed =%.2f kph, average L/D = %.2f :1 duration= %s, start=%s, end=%s)" %
+                     (self.track_length, self.speed(), self.glide_ratio(), self.duration(), str(self.enter_fix), str(self.exit_fix)))                                                                        
+                                                                     
 class Flight:
     """Parses IGC file, detects thermals and checks for record anomalies.
 
@@ -417,6 +477,33 @@ class Flight:
             descr += ", thermals: %d" % len(self.thermals)
         descr += ")"
         return descr
+
+    @staticmethod
+    def create_from_file(filename):
+        fixes = []
+        a_records = []
+        i_records = []
+        h_records = []
+        
+        with open(filename, 'r') as flight_file:
+            for line in flight_file:
+                line = line.replace('\n', '').replace('\r', '')
+                if not line:
+                    continue
+                if line[0] == 'A':
+                    a_records.append(line)
+                elif line[0] == 'B':
+                    fix = GNSSFix.build_from_B_record(line)
+                    if fix is not None:
+                        fixes.append(fix)
+                elif line[0] == 'I':
+                    i_records.append(line)
+                elif line[0] == 'H':
+                    h_records.append(line)
+                else:
+                    pass # Do not parse any other types of IGC records
+        flight = Flight(fixes, a_records, h_records, i_records)
+        return flight
 
     def _check_altitudes(self):
         press_alt_violations_num = 0;
@@ -636,28 +723,99 @@ class Flight:
             self.fixes[i].circling = (output[i] == 'c')
 
     def _find_thermals(self):
+        """Goes through the fixes and finds the thermals.
+        
+        Every point not in a thermal is put into a glide.
+        
+        If we get to end of the fixes and there is still an open glide (i.e. flight not finishing in a valid thermal)
+        the glide will be closed. 
+        """
         self.thermals = []
+        self.glides = []
         circling_now = False
+        gliding_now = False
         first_fix = None
+        first_glide_fix = None
+        last_glide_fix = None
+        distance = 0.0# if we get to end of self.fixes and there is still an open glide (i.e. flight not finishing in a valid thermal)
         for fix in self.fixes:
             if not circling_now and fix.circling:
                 # Just started circling
                 circling_now = True
                 first_fix = fix
+                distance_start_circling = distance
             elif circling_now and not fix.circling:
                 # Just ended circling
                 circling_now = False
                 thermal = Thermal(first_fix, fix)
                 if thermal.acceptable():
                     self.thermals.append(thermal)
+                    # glide ends at start of thermal
+                    glide = Glide(first_glide_fix, first_fix, distance_start_circling)
+                    self.glides.append(glide)
+                    gliding_now = False
+                
+            if gliding_now:
+                distance = distance + fix.distance_to(last_glide_fix)
+                last_glide_fix = fix
+            else:
+                #just started gliding
+                first_glide_fix = fix
+                last_glide_fix = fix
+                gliding_now = True
+                distance = 0.0
+
+        
+        if gliding_now:
+            glide = Glide(first_glide_fix, last_glide_fix, distance)
+            self.glides.append(glide)
+            
+    def dump_thermals_to_wpt_file(self,wptfilename, endpoints=False): 
+        """Converts time from floating point seconds to hours/minutes/seconds.
+    
+    
+        Args:
+            wptfilename: File to be written. If it exists it will be overwritten.
+            endpoints: optional argument. If true thermal endpoints as well as startpoints will be written with suffix END in the waypoint label
+               
+        """
+    #write a .wpt file in Geo format with the thermal start locations as waypoints. Optional flag to also record end loctions
+        with open(wptfilename, 'w') as wpt:
+            wpt.write("$FormatGEO\n")
+            
+            for x, thermal in enumerate(self.thermals):
+                lat = degrees_float_to_degrees_minutes_seconds(self.thermals[x].enter_fix.lat)
+                lon = degrees_float_to_degrees_minutes_seconds(self.thermals[x].enter_fix.lon)
+                wpt.write("%02d        " % x)
+                wpt.write("N %02d %02d %05.2f    " % (lat.degrees, lat.minutes, lat.seconds))
+                wpt.write("E %03d %02d %05.2f     " % (lon.degrees, lon.minutes, lon.seconds))
+                wpt.write("          %d\n" % self.thermals[x].enter_fix.gnss_alt)
+                
+                if endpoints:
+                    lat = degrees_float_to_degrees_minutes_seconds(self.thermals[x].exit_fix.lat)
+                    lon = degrees_float_to_degrees_minutes_seconds(self.thermals[x].exit_fix.lon)
+                    wpt.write("%02dEND     " % x)
+                    wpt.write("N %02d %02d %05.2f    " % (lat.degrees, lat.minutes, lat.seconds))
+                    wpt.write("E %03d %02d %05.2f     " % (lon.degrees, lon.minutes, lon.seconds))
+                    wpt.write("          %d\n" % self.thermals[x].exit_fix.gnss_alt)
+                    
+                               
+            
 
 if __name__ == "__main__":
     import sys
     if len(sys.argv) != 2:
         print "Please pass an .igc file in argv"
-
+    wptfilename = "thermals.wpt"
     flight = Flight.create_from_file(sys.argv[1])
     print "flight =", flight
     print "fixes[0] =", flight.fixes[0]
-    print "thermals[0] =", flight.thermals[0]
-
+    x = 0
+    flight.dump_thermals_to_wpt_file(wptfilename,True)
+    for x, thermal in enumerate(flight.thermals):
+       
+        print "glide[%d] " % x, flight.glides[x]
+        print "thermals[%d] = " % x, flight.thermals[x]
+        
+ 
+   
