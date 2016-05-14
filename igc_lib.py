@@ -677,7 +677,7 @@ class Flight:
             if endpoints:
                 lat =decdeg2dms(flight.thermals[x].exit_fix.lat)
                 lon = decdeg2dms(flight.thermals[x].exit_fix.lon)
-                wpt.write("%02dend     N %02d %02d %05.2f    E %03d %02d %05.2f     %d\n" % (x,lat.degrees, lat.minutes, lat.seconds,lon.degrees, lon.minutes, lon.seconds, flight.thermals[x].exit_fix.gnss_alt))
+                wpt.write("%02dEND     N %02d %02d %05.2f    E %03d %02d %05.2f     %d\n" % (x,lat.degrees, lat.minutes, lat.seconds,lon.degrees, lon.minutes, lon.seconds, flight.thermals[x].exit_fix.gnss_alt))
             x=x+1
         wpt.close()    
 
