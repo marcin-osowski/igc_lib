@@ -69,8 +69,10 @@ class GNSSFix:
 
         Derived attributes:
             alt: a float, either press_alt or gnss_alt
+            gsp: a float, current ground speed, km/h
             bearing: a float, bearing to the next fix, in degrees
-            bearing_change_rate: a float, bearing change rate in degrees/second
+            bearing_change_rate: a float, bearing change rate, degrees/second
+            flying: a bool, whether this fix is during a flight
             circling: a bool, whether this fix is inside a thermal
     """
     @staticmethod
@@ -535,7 +537,7 @@ class Flight:
 
 
     def _compute_ground_speeds(self):
-        """Adds ground speed info (km/h) to GNSSFix objects on my list."""
+        """Adds ground speed info (km/h) to self.fixes."""
         self.fixes[0].gsp = 0.0
         for i in xrange(1, len(self.fixes)):
             dist = self.fixes[i].distance_to(self.fixes[i-1])
@@ -546,7 +548,7 @@ class Flight:
                 self.fixes[i].gsp = dist/rawtime*3600.0
 
     def _compute_flight(self):
-        """Adds boolean flag .flying to my GNSSFix'es and chooses takeoff/landing fixes."""
+        """Adds boolean flag .flying to self.fixes, and chooses takeoff/landing fixes."""
         flight_list = []
         for fix in self.fixes:
             if fix.gsp > igc_lib_config.MIN_GSP_FLIGHT:
@@ -574,22 +576,8 @@ class Flight:
 
         (output, score) = mm.viterbi(flight_list, state_alphabet)
         
-        self.takeoff_pos = None
-        self.landing_pos = None
-
-        for i in xrange(len(self.fixes)):
-            now_flying = output[i] == 'f'
-            if self.takeoff_pos is None and now_flying:
-                self.takeoff_pos = i
-            if now_flying:
-                self.landing_pos = i
-            self.fixes[i].flying = now_flying
-
-        if self.takeoff_pos is not None:
-            self.takeoff = self.fixes[self.takeoff_pos]
-        if self.landing_pos is not None:
-            self.landing = self.fixes[self.landing_pos]
-
+        for fix, output in zip(self.fixes, output):
+            fix.flying = (output == 'f')
 
     def _compute_bearings(self):
         """Adds bearing info to self.fixes."""
