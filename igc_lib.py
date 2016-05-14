@@ -43,12 +43,30 @@ def strip_non_printable_chars(string):
 
 
 def rawtime_float_to_hms(timef):
-    """Converts time from floating point seconds to hours/minutes/seconds tuple."""
+    """Converts time from floating point seconds to hours/minutes/seconds.
+    
+    
+    Args:
+        timef: A floating point time in seconds to be converted
+        
+    Returns:
+        A namedtuple with hours, minutes and seconds elements
+    """
     time = int(round(timef))
-    return (time/3600), (time%3600)/60, time%60
+    hms = collections.namedtuple('hms', ['hours', 'minutes', 'seconds'])
+    
+    return hms((time/3600), (time%3600)/60, time%60)
 
-def decdeg2dms(dd):
-    ddmmss=collections.namedtuple('ddmmss', ['degrees', 'minutes', 'seconds'])
+def degrees_float_to_degrees_minutes_seconds(dd):
+    """Converts time from floating point degrees to degrees/minutes/floating point seconds.
+    
+    Args:
+        dd: Floating point degrees to be converted
+        
+    Returns:
+        A namedtuple with degrees, minutes and floating point seconds elements
+    """
+    ddmmss = collections.namedtuple('ddmmss', ['degrees', 'minutes', 'seconds'])
     negative = dd < 0
     dd = abs(dd)
     minutes,seconds = divmod(dd*3600,60)
@@ -248,7 +266,8 @@ class Glide:
         return (self.track_length * 1000.0) / self.alt_change()
     
     def duration(self):
-        return ("%d m %d s" % (rawtime_float_to_hms(self.rawtime_change())[1],rawtime_float_to_hms(self.rawtime_change())[2]))
+        hms = rawtime_float_to_hms(self.rawtime_change())
+        return ("%d m %d s" % (hms.minutes, hms.seconds))
         
 
     
@@ -379,6 +398,7 @@ class Flight:
         a_records = []
         i_records = []
         h_records = []
+        
         with open(filename, 'r') as flight_file:
             for line in flight_file:
                 line = line.replace('\n', '').replace('\r', '')
@@ -626,6 +646,13 @@ class Flight:
             self.fixes[i].circling = (output[i] == 'c')
 
     def find_thermals(self):
+        """Goes through the fixes and finds the thermals.
+        
+        Every point not in a thermal is put into a glide.
+        
+        If we get to end of the fixes and there is still an open glide (i.e. flight not finishing in a valid thermal)
+        the glide will be closed. 
+        """
         self.thermals = []
         self.glides = []
         circling_now = False
@@ -633,7 +660,7 @@ class Flight:
         first_fix = None
         first_glide_fix = None
         last_glide_fix = None
-        distance = 0.0
+        distance = 0.0# if we get to end of self.fixes and there is still an open glide (i.e. flight not finishing in a valid thermal)
         for fix in self.fixes:
             if not circling_now and fix.circling:
                 # Just started circling
@@ -650,36 +677,53 @@ class Flight:
                     glide = Glide(first_glide_fix, first_fix, distance_start_circling)
                     self.glides.append(glide)
                     gliding_now = False
-       
-            if gliding_now == False:
-                    # just started gliding
+                
+            if gliding_now:
+                distance = distance + fix.distance_to(last_glide_fix)
+                last_glide_fix = fix
+            else:
+                #just started gliding
                 first_glide_fix = fix
                 last_glide_fix = fix
                 gliding_now = True
                 distance = 0.0
-            elif gliding_now == True:
-                distance = distance + fix.distance_to(last_glide_fix)
-                last_glide_fix = fix
+
         
-        # if we get to end of self.fixes and there is still an open glide (i.e. flight not finishing in a valid thermal)
-        if gliding_now == True:
+        if gliding_now:
             glide = Glide(first_glide_fix, last_glide_fix, distance)
             self.glides.append(glide)
             
-    def create_thermal_waypoints(self,wptfilename, endpoints=False): #write a .wpt file in Geo format with the thermal start locations as waypoints. Optional flag to also record end loctions
-        wpt = open(wptfilename, 'w')
-        wpt.write("$FormatGEO\n")
-        x=0
-        while x != len(self.thermals):
-            lat =decdeg2dms(flight.thermals[x].enter_fix.lat)
-            lon = decdeg2dms(flight.thermals[x].enter_fix.lon)
-            wpt.write("%02d        N %02d %02d %05.2f    E %03d %02d %05.2f     %d\n" % (x,lat.degrees, lat.minutes, lat.seconds,lon.degrees, lon.minutes, lon.seconds, flight.thermals[x].enter_fix.gnss_alt))
-            if endpoints:
-                lat =decdeg2dms(flight.thermals[x].exit_fix.lat)
-                lon = decdeg2dms(flight.thermals[x].exit_fix.lon)
-                wpt.write("%02dEND     N %02d %02d %05.2f    E %03d %02d %05.2f     %d\n" % (x,lat.degrees, lat.minutes, lat.seconds,lon.degrees, lon.minutes, lon.seconds, flight.thermals[x].exit_fix.gnss_alt))
-            x=x+1
-        wpt.close()    
+    def dump_thermals_to_wpt_file(self,wptfilename, endpoints=False): 
+        """Converts time from floating point seconds to hours/minutes/seconds.
+    
+    
+        Args:
+            wptfilename: File to be written. If it exists it will be overwritten.
+            endpoints: optional argument. If true thermal endpoints as well as startpoints will be written with suffix END in the waypoint label
+               
+        """
+    #write a .wpt file in Geo format with the thermal start locations as waypoints. Optional flag to also record end loctions
+        with open(wptfilename, 'w') as wpt:
+            wpt.write("$FormatGEO\n")
+            
+            for x, thermal in enumerate(self.thermals):
+                lat = degrees_float_to_degrees_minutes_seconds(self.thermals[x].enter_fix.lat)
+                lon = degrees_float_to_degrees_minutes_seconds(self.thermals[x].enter_fix.lon)
+                wpt.write("%02d        " % x)
+                wpt.write("N %02d %02d %05.2f    " % (lat.degrees, lat.minutes, lat.seconds))
+                wpt.write("E %03d %02d %05.2f     " % (lon.degrees, lon.minutes, lon.seconds))
+                wpt.write("          %d\n" % self.thermals[x].enter_fix.gnss_alt)
+                
+                if endpoints:
+                    lat = degrees_float_to_degrees_minutes_seconds(self.thermals[x].exit_fix.lat)
+                    lon = degrees_float_to_degrees_minutes_seconds(self.thermals[x].exit_fix.lon)
+                    wpt.write("%02dEND     " % x)
+                    wpt.write("N %02d %02d %05.2f    " % (lat.degrees, lat.minutes, lat.seconds))
+                    wpt.write("E %03d %02d %05.2f     " % (lon.degrees, lon.minutes, lon.seconds))
+                    wpt.write("          %d\n" % self.thermals[x].exit_fix.gnss_alt)
+                    
+                               
+            
 
 if __name__ == "__main__":
     import sys
@@ -690,12 +734,11 @@ if __name__ == "__main__":
     print "flight =", flight
     print "fixes[0] =", flight.fixes[0]
     x = 0
-    flight.create_thermal_waypoints("thermals.wpt",True)
-    while x != len(flight.thermals):
+    flight.dump_thermals_to_wpt_file(wptfilename,True)
+    for x, thermal in enumerate(flight.thermals):
        
         print "glide[%d] " % x, flight.glides[x]
-        
         print "thermals[%d] = " % x, flight.thermals[x]
-        x=x+1
+        
  
    
