@@ -661,6 +661,3 @@ if __name__ == "__main__":
     print "fixes[0] =", flight.fixes[0]
     print "thermals[0] =", flight.thermals[0]
 
-    import ipdb
-    ipdb.set_trace()
-
