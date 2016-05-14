@@ -2,6 +2,7 @@
 import math
 import re
 import datetime
+import collections
 from Bio.Alphabet import Alphabet
 from Bio.HMM.MarkovModel import MarkovModelBuilder
 
@@ -46,6 +47,20 @@ def rawtime_float_to_hms(timef):
     time = int(round(timef))
     return (time/3600), (time%3600)/60, time%60
 
+def decdeg2dms(dd):
+    ddmmss=collections.namedtuple('ddmmss', ['degrees', 'minutes', 'seconds'])
+    negative = dd < 0
+    dd = abs(dd)
+    minutes,seconds = divmod(dd*3600,60)
+    degrees,minutes = divmod(minutes,60)
+    if negative:
+        if degrees > 0:
+            degrees = -degrees
+        elif minutes > 0:
+            minutes = -minutes
+        else:
+            seconds = -seconds
+    return ddmmss(degrees,minutes,seconds)
 
 class GNSSFix:
     """ Stores single GNSS flight recorder fix (a B-record).
@@ -209,7 +224,41 @@ class Thermal:
     def __str__(self):
         return ("Thermal(vertical_velocity=%.2f [m/s], enter=%s, exit=%s)" %
                      (self.vertical_velocity(), str(self.enter_fix), str(self.exit_fix)))
+    
+class Glide:
 
+    def __init__(self, enter_fix, exit_fix, track_length):
+        self.enter_fix = enter_fix
+        self.exit_fix = exit_fix
+        self.track_length = track_length
+
+    def rawtime_change(self):
+        return self.exit_fix.rawtime - self.enter_fix.rawtime
+                               
+    def speed(self):
+        return self.track_length / (self.rawtime_change() / 3600.0)
+       
+    
+    def alt_change(self):
+        return self.enter_fix.alt - self.exit_fix.alt 
+                               
+    def glide_ratio(self):
+        if math.fabs(self.rawtime_change()) < 1e-7:
+            return 0.0
+        return (self.track_length * 1000.0) / self.alt_change()
+    
+    def duration(self):
+        return ("%d m %d s" % (rawtime_float_to_hms(self.rawtime_change())[1],rawtime_float_to_hms(self.rawtime_change())[2]))
+        
+
+    
+    def __repr__(self):
+        return self.__str__()
+ 
+    def __str__(self):
+        return ("Glide (distance=%.2f km, speed =%.2f kph, average L/D = %.2f :1 duration= %s, start=%s, end=%s)" %
+                     (self.track_length, self.speed(), self.glide_ratio(), self.duration(), str(self.enter_fix), str(self.exit_fix)))                                                                        
+                                                                     
 class Flight:
     def __init__(self, fixes, a_records, h_records, i_records):
         self.fixes = fixes
@@ -578,27 +627,75 @@ class Flight:
 
     def find_thermals(self):
         self.thermals = []
+        self.glides = []
         circling_now = False
+        gliding_now = False
         first_fix = None
+        first_glide_fix = None
+        last_glide_fix = None
+        distance = 0.0
         for fix in self.fixes:
             if not circling_now and fix.circling:
                 # Just started circling
                 circling_now = True
                 first_fix = fix
+                distance_start_circling = distance
             elif circling_now and not fix.circling:
                 # Just ended circling
                 circling_now = False
                 thermal = Thermal(first_fix, fix)
                 if thermal.acceptable():
                     self.thermals.append(thermal)
+                    # glide ends at start of thermal
+                    glide = Glide(first_glide_fix, first_fix, distance_start_circling)
+                    self.glides.append(glide)
+                    gliding_now = False
+       
+            if gliding_now == False:
+                    # just started gliding
+                first_glide_fix = fix
+                last_glide_fix = fix
+                gliding_now = True
+                distance = 0.0
+            elif gliding_now == True:
+                distance = distance + fix.distance_to(last_glide_fix)
+                last_glide_fix = fix
+        
+        # if we get to end of self.fixes and there is still an open glide (i.e. flight not finishing in a valid thermal)
+        if gliding_now == True:
+            glide = Glide(first_glide_fix, last_glide_fix, distance)
+            self.glides.append(glide)
+            
+    def create_thermal_waypoints(self,wptfilename, endpoints=False): #write a .wpt file in Geo format with the thermal start locations as waypoints. Optional flag to also record end loctions
+        wpt = open(wptfilename, 'w')
+        wpt.write("$FormatGEO\n")
+        x=0
+        while x != len(self.thermals):
+            lat =decdeg2dms(flight.thermals[x].enter_fix.lat)
+            lon = decdeg2dms(flight.thermals[x].enter_fix.lon)
+            wpt.write("%02d        N %02d %02d %05.2f    E %03d %02d %05.2f     %d\n" % (x,lat.degrees, lat.minutes, lat.seconds,lon.degrees, lon.minutes, lon.seconds, flight.thermals[x].enter_fix.gnss_alt))
+            if endpoints:
+                lat =decdeg2dms(flight.thermals[x].exit_fix.lat)
+                lon = decdeg2dms(flight.thermals[x].exit_fix.lon)
+                wpt.write("%02dend     N %02d %02d %05.2f    E %03d %02d %05.2f     %d\n" % (x,lat.degrees, lat.minutes, lat.seconds,lon.degrees, lon.minutes, lon.seconds, flight.thermals[x].exit_fix.gnss_alt))
+            x=x+1
+        wpt.close()    
 
 if __name__ == "__main__":
     import sys
     if len(sys.argv) != 2:
         print "Please pass an .igc file in argv"
-
+    wptfilename = "thermals.wpt"
     flight = Flight.create_from_file(sys.argv[1])
     print "flight =", flight
     print "fixes[0] =", flight.fixes[0]
-    print "thermals[0] =", flight.thermals[0]
-
+    x = 0
+    flight.create_thermal_waypoints("thermals.wpt",True)
+    while x != len(flight.thermals):
+       
+        print "glide[%d] " % x, flight.glides[x]
+        
+        print "thermals[%d] = " % x, flight.thermals[x]
+        x=x+1
+ 
+   
