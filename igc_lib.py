@@ -478,33 +478,6 @@ class Flight:
         descr += ")"
         return descr
 
-    @staticmethod
-    def create_from_file(filename):
-        fixes = []
-        a_records = []
-        i_records = []
-        h_records = []
-        
-        with open(filename, 'r') as flight_file:
-            for line in flight_file:
-                line = line.replace('\n', '').replace('\r', '')
-                if not line:
-                    continue
-                if line[0] == 'A':
-                    a_records.append(line)
-                elif line[0] == 'B':
-                    fix = GNSSFix.build_from_B_record(line)
-                    if fix is not None:
-                        fixes.append(fix)
-                elif line[0] == 'I':
-                    i_records.append(line)
-                elif line[0] == 'H':
-                    h_records.append(line)
-                else:
-                    pass # Do not parse any other types of IGC records
-        flight = Flight(fixes, a_records, h_records, i_records)
-        return flight
-
     def _check_altitudes(self):
         press_alt_violations_num = 0;
         gnss_alt_violations_num = 0;
