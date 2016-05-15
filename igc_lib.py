@@ -1,8 +1,10 @@
 #!/usr/bin/env python
-import math
-import re
-import datetime
 import collections
+import datetime
+import math
+import os
+import re
+import sys
 from Bio.Alphabet import Alphabet
 from Bio.HMM.MarkovModel import MarkovModelBuilder
 
@@ -761,17 +763,15 @@ class Flight:
             glide = Glide(first_glide_fix, last_glide_fix, distance)
             self.glides.append(glide)
             
-    def dump_thermals_to_wpt_file(self,wptfilename, endpoints=False): 
-        """Converts time from floating point seconds to hours/minutes/seconds.
-    
+    def dump_thermals_to_wpt_file(self, wptfilename, endpoints=False): 
+        """Dump flight's thermals to a .wpt file in Geo format.
     
         Args:
             wptfilename: File to be written. If it exists it will be overwritten.
-            endpoints: optional argument. If true thermal endpoints as well as startpoints will be written with suffix END in the waypoint label
-               
+            endpoints: optional argument. If true thermal endpoints as well
+            as startpoints will be written with suffix END in the waypoint label.
         """
-    #write a .wpt file in Geo format with the thermal start locations as waypoints. Optional flag to also record end loctions
-        with open(wptfilename, 'w') as wpt:
+        with open(wptfilename, 'wt') as wpt:
             wpt.write("$FormatGEO\n")
             
             for x, thermal in enumerate(self.thermals):
@@ -789,24 +789,53 @@ class Flight:
                     wpt.write("N %02d %02d %05.2f    " % (lat.degrees, lat.minutes, lat.seconds))
                     wpt.write("E %03d %02d %05.2f     " % (lon.degrees, lon.minutes, lon.seconds))
                     wpt.write("          %d\n" % self.thermals[x].exit_fix.gnss_alt)
-                    
-                               
-            
+
+    def dump_thermals_to_cup_file(self, cup_filename):
+        """Dump flight's thermals to a .cup file (SeeYou).
+
+        Args:
+            cup_filename: a string, the name of the file to be written.
+        """
+        with open(cup_filename, 'wt') as wpt:
+            wpt.write('name,code,country,lat,')
+            wpt.write('lon,elev,style,rwdir,rwlen,freq,desc,userdata,pics\n')
+
+            def write_fix(name, fix):
+                lat = degrees_float_to_degrees_minutes_seconds(fix.lat)
+                lon = degrees_float_to_degrees_minutes_seconds(fix.lon)
+                wpt.write('"%s",,,%02d%02d.%03dN,' % (
+                    name, lat.degrees, lat.minutes,
+                    int(round(lat.seconds/60.0*1000.0))))
+                wpt.write('%03d%02d.%03dE,%fm,,,,,,,' % (
+                    lon.degrees, lon.minutes,
+                    int(round(lon.seconds/60.0*1000.0)),
+                    fix.gnss_alt))
+                wpt.write('\n')
+
+            for i, thermal in enumerate(self.thermals):
+                write_fix('%02d' % i, thermal.enter_fix)
+                write_fix('%02d_END' % i, thermal.exit_fix)
 
 if __name__ == "__main__":
-    import sys
     if len(sys.argv) != 2:
         print "Please pass an .igc file in argv"
-    wptfilename = "thermals.wpt"
-    flight = Flight.create_from_file(sys.argv[1])
+        sys.exit(1)
+
+    input_file = sys.argv[1]
+    input_base_file = os.path.splitext(input_file)[0]
+    wpt_file = "%s-thermals.wpt" % input_base_file
+    cup_file = "%s-thermals.cup" % input_base_file
+
+    flight = Flight.create_from_file(input_file)
     print "flight =", flight
     print "fixes[0] =", flight.fixes[0]
-    x = 0
-    flight.dump_thermals_to_wpt_file(wptfilename,True)
-    for x, thermal in enumerate(flight.thermals):
-       
-        print "glide[%d] " % x, flight.glides[x]
-        print "thermals[%d] = " % x, flight.thermals[x]
+    for x, (thermal, glide) in enumerate(zip(flight.thermals, flight.glides)):
+        print "glide[%d] " % x, glide
+        print "thermals[%d] = " % x, thermal
+
+    print "Dumping thermals to %s and %s" % (wpt_file, cup_file)
+    flight.dump_thermals_to_wpt_file(wpt_file, True)
+    flight.dump_thermals_to_cup_file(cup_file)
         
  
    
