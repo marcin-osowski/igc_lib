@@ -95,7 +95,7 @@ class GNSSFix:
         Derived attributes:
             alt: a float, either press_alt or gnss_alt
             gsp: a float, current ground speed, km/h
-            bearing: a float, bearing to the next fix, in degrees
+            bearing: a float, aircraft bearing, in degrees
             bearing_change_rate: a float, bearing change rate, degrees/second
             flying: a bool, whether this fix is during a flight
             circling: a bool, whether this fix is inside a thermal
@@ -646,20 +646,38 @@ class Flight:
         self.fixes[-1].bearing = self.fixes[-2].bearing
 
     def _compute_bearing_change_rates(self):
-        """Adds bearing change rate info to self.fixes."""
-        self.fixes[0].bearing_change_rate = 0.0
-        for i in xrange(1, len(self.fixes)):
-            bearing_change = self.fixes[i].bearing - self.fixes[i-1].bearing
-            if math.fabs(bearing_change) > 180.0:
-                if bearing_change < 0.0:
-                    bearing_change += 360.0
-                else:
-                    bearing_change -= 360.0
-            rawtime_change = self.fixes[i].rawtime - self.fixes[i-1].rawtime
-            if math.fabs(rawtime_change) > 0.0000001:
-                self.fixes[i].bearing_change_rate = bearing_change/rawtime_change
+        """Adds bearing change rate info to self.fixes.
+
+        Computing bearing change rate between neighboring fixes proved
+        itself to be noisy on tracks recorded with minimum interval (1 second).
+        Therefore we compute rates between points that are at least X seconds
+        apart.
+        """
+        def find_prev_fix(curr_fix):
+            """Computes the previous fix to be used in bearing rate change calculation."""
+            prev_fix = None
+            for i in xrange(curr_fix - 1, 0, -1):
+                time_dist = math.fabs(self.fixes[curr_fix].timestamp
+                    - self.fixes[i].timestamp)
+                if time_dist + 1e-7 > igc_lib_config.FIX_TIME_DIST_FOR_CIRCLING:
+                    prev_fix = i
+                    break
+            return prev_fix
+
+        for curr_fix in xrange(len(self.fixes)):
+            prev_fix = find_prev_fix(curr_fix)
+
+            if prev_fix is None:
+                self.fixes[curr_fix].bearing_change_rate = 0.0
             else:
-                self.fixes[i].bearing_change_rate = 0.0
+                bearing_change = self.fixes[prev_fix].bearing - self.fixes[curr_fix].bearing
+                if math.fabs(bearing_change) > 180.0:
+                    if bearing_change < 0.0:
+                        bearing_change += 360.0
+                    else:
+                        bearing_change -= 360.0
+                rawtime_change = self.fixes[prev_fix].rawtime - self.fixes[curr_fix].rawtime
+                self.fixes[curr_fix].bearing_change_rate = bearing_change/rawtime_change
 
     def _compute_circling(self):
         """Adds .circling to self.fixes."""
