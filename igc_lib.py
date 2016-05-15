@@ -58,28 +58,36 @@ def rawtime_float_to_hms(timef):
     
     return hms((time/3600), (time%3600)/60, time%60)
 
-def degrees_float_to_degrees_minutes_seconds(dd):
-    """Converts time from floating point degrees to degrees/minutes/floating point seconds.
+def degrees_float_to_degrees_minutes_seconds(dd, lon_or_lat):
+    """Converts from floating point degrees to degrees/minutes/floating point seconds.
     
     Args:
         dd: Floating point degrees to be converted
+        lon_or_lat: String argument used to calculate the hemisphere. 
+                    Options are lon - for longitude or lat - for latitude
+                    if not one of these values hemisphere will default to '?' 
+                    
         
     Returns:
-        A namedtuple with degrees, minutes and floating point seconds elements
+        A namedtuple with hemisphere, degrees, minutes and floating point seconds elements
     """
-    ddmmss = collections.namedtuple('ddmmss', ['degrees', 'minutes', 'seconds'])
+    ddmmss = collections.namedtuple('ddmmss', ['hemisphere', 'degrees', 'minutes', 'seconds'])
     negative = dd < 0
     dd = abs(dd)
     minutes,seconds = divmod(dd*3600,60)
     degrees,minutes = divmod(minutes,60)
+    if lon_or_lat == 'lon':
+        hemisphere = 'E'
+    elif lon_or_lat == 'lat':
+        hemisphere = 'N'
+
     if negative:
-        if degrees > 0:
-            degrees = -degrees
-        elif minutes > 0:
-            minutes = -minutes
-        else:
-            seconds = -seconds
-    return ddmmss(degrees,minutes,seconds)
+        if lon_or_lat == 'lon':
+            hemisphere = 'W'
+        elif lon_or_lat == 'lat':
+            hemisphere = 'S'
+        
+    return ddmmss(hemisphere, degrees,minutes,seconds)
 
 class GNSSFix:
     """Stores single GNSS flight recorder fix (a B-record).
@@ -775,19 +783,19 @@ class Flight:
             wpt.write("$FormatGEO\n")
             
             for x, thermal in enumerate(self.thermals):
-                lat = degrees_float_to_degrees_minutes_seconds(self.thermals[x].enter_fix.lat)
-                lon = degrees_float_to_degrees_minutes_seconds(self.thermals[x].enter_fix.lon)
+                lat = degrees_float_to_degrees_minutes_seconds(self.thermals[x].enter_fix.lat, 'lat')
+                lon = degrees_float_to_degrees_minutes_seconds(self.thermals[x].enter_fix.lon, 'lon')
                 wpt.write("%02d        " % x)
-                wpt.write("N %02d %02d %05.2f    " % (lat.degrees, lat.minutes, lat.seconds))
-                wpt.write("E %03d %02d %05.2f     " % (lon.degrees, lon.minutes, lon.seconds))
+                wpt.write("%s %02d %02d %05.2f    " % (lat.hemisphere, lat.degrees, lat.minutes, lat.seconds))
+                wpt.write("%s %03d %02d %05.2f     " % (lon.hemisphere,lon.degrees, lon.minutes, lon.seconds))
                 wpt.write("          %d\n" % self.thermals[x].enter_fix.gnss_alt)
                 
                 if endpoints:
-                    lat = degrees_float_to_degrees_minutes_seconds(self.thermals[x].exit_fix.lat)
-                    lon = degrees_float_to_degrees_minutes_seconds(self.thermals[x].exit_fix.lon)
+                    lat = degrees_float_to_degrees_minutes_seconds(self.thermals[x].exit_fix.lat, 'lat')
+                    lon = degrees_float_to_degrees_minutes_seconds(self.thermals[x].exit_fix.lon, 'lon')
                     wpt.write("%02dEND     " % x)
-                    wpt.write("N %02d %02d %05.2f    " % (lat.degrees, lat.minutes, lat.seconds))
-                    wpt.write("E %03d %02d %05.2f     " % (lon.degrees, lon.minutes, lon.seconds))
+                    wpt.write("%s %02d %02d %05.2f    " % (lat.hemisphere, lat.degrees, lat.minutes, lat.seconds))
+                    wpt.write("%s %03d %02d %05.2f     " % (lon.hemisphere, lon.degrees, lon.minutes, lon.seconds))
                     wpt.write("          %d\n" % self.thermals[x].exit_fix.gnss_alt)
 
     def dump_thermals_to_cup_file(self, cup_filename):
@@ -801,14 +809,14 @@ class Flight:
             wpt.write('lon,elev,style,rwdir,rwlen,freq,desc,userdata,pics\n')
 
             def write_fix(name, fix):
-                lat = degrees_float_to_degrees_minutes_seconds(fix.lat)
-                lon = degrees_float_to_degrees_minutes_seconds(fix.lon)
-                wpt.write('"%s",,,%02d%02d.%03dN,' % (
+                lat = degrees_float_to_degrees_minutes_seconds(fix.lat, 'lat')
+                lon = degrees_float_to_degrees_minutes_seconds(fix.lon, 'lon')
+                wpt.write('"%s",,,%02d%02d.%03d%s,' % (
                     name, lat.degrees, lat.minutes,
-                    int(round(lat.seconds/60.0*1000.0))))
-                wpt.write('%03d%02d.%03dE,%fm,,,,,,,' % (
+                    int(round(lat.seconds/60.0*1000.0)), lat.hemisphere))
+                wpt.write('%03d%02d.%03d%s,%fm,,,,,,,' % (
                     lon.degrees, lon.minutes,
-                    int(round(lon.seconds/60.0*1000.0)),
+                    int(round(lon.seconds/60.0*1000.0)), lon.hemisphere,
                     fix.gnss_alt))
                 wpt.write('\n')
 
