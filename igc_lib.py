@@ -63,7 +63,7 @@ def degrees_float_to_degrees_minutes_seconds(dd, lon_or_lat):
     
     Args:
         dd: Floating point degrees to be converted
-        lon_or_lat: Optional string argument used to calculate the hemisphere. 
+        lon_or_lat: String argument used to calculate the hemisphere. 
                     Options are lon - for longitude or lat - for latitude
                     if not one of these values hemisphere will default to '?' 
                     
@@ -811,14 +811,14 @@ class Flight:
             wpt.write('lon,elev,style,rwdir,rwlen,freq,desc,userdata,pics\n')
 
             def write_fix(name, fix):
-                lat = degrees_float_to_degrees_minutes_seconds(fix.lat)
-                lon = degrees_float_to_degrees_minutes_seconds(fix.lon)
-                wpt.write('"%s",,,%02d%02d.%03dN,' % (
+                lat = degrees_float_to_degrees_minutes_seconds(fix.lat, 'lat')
+                lon = degrees_float_to_degrees_minutes_seconds(fix.lon, 'lon')
+                wpt.write('"%s",,,%02d%02d.%03d%s,' % (
                     name, lat.degrees, lat.minutes,
-                    int(round(lat.seconds/60.0*1000.0))))
-                wpt.write('%03d%02d.%03dE,%fm,,,,,,,' % (
+                    int(round(lat.seconds/60.0*1000.0)), lat.hemisphere))
+                wpt.write('%03d%02d.%03d%s,%fm,,,,,,,' % (
                     lon.degrees, lon.minutes,
-                    int(round(lon.seconds/60.0*1000.0)),
+                    int(round(lon.seconds/60.0*1000.0)), lon.hemisphere,
                     fix.gnss_alt))
                 wpt.write('\n')
 
