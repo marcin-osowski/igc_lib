@@ -80,9 +80,7 @@ def degrees_float_to_degrees_minutes_seconds(dd, lon_or_lat):
         hemisphere = 'E'
     elif lon_or_lat == 'lat':
         hemisphere = 'N'
-    else:
-        hemisphere = '?'
-    
+
     if negative:
         if lon_or_lat == 'lon':
             hemisphere = 'W'
