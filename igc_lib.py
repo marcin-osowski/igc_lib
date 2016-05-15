@@ -4,6 +4,7 @@ import math
 import re
 from Bio.Alphabet import Alphabet
 from Bio.HMM.MarkovModel import MarkovModelBuilder
+import simplekml
 
 import igc_lib_config
 
@@ -686,6 +687,7 @@ class Flight:
                 rawtime_change = self.fixes[prev_fix].rawtime - self.fixes[curr_fix].rawtime
                 self.fixes[curr_fix].bearing_change_rate = bearing_change/rawtime_change
 
+
     def _compute_circling(self):
         """Adds .circling to self.fixes."""
         rate_change_list = []
@@ -767,7 +769,7 @@ class Flight:
         if gliding_now:
             glide = Glide(first_glide_fix, last_glide_fix, distance)
             self.glides.append(glide)
-            
+
     def dump_thermals_to_wpt_file(self, wptfilename, endpoints=False): 
         """Dump flight's thermals to a .wpt file in Geo format.
     
@@ -820,3 +822,49 @@ class Flight:
             for i, thermal in enumerate(self.thermals):
                 write_fix('%02d' % i, thermal.enter_fix)
                 write_fix('%02d_END' % i, thermal.exit_fix)
+
+    def dump_to_kml(self, kml_filename):
+        """Dumps the flight to KML format.
+
+        Args:
+            kml_filename: a string, the name of the output file.
+        """
+        kml = simplekml.Kml()
+
+        def add_point(name, fix):
+            kml.newpoint(name=name, coords=[(fix.lon, fix.lat)])
+
+        if False:
+            for fix in self.fixes:
+                add_point(name="fix", fix=fix)
+
+
+        coords = []
+        for fix in self.fixes:
+            coords.append((fix.lon, fix.lat))
+        kml.newlinestring(coords=coords)
+
+        for i, thermal in enumerate(self.thermals):
+            add_point(name="thermal_%02d" % i, fix=thermal.enter_fix)
+            add_point(name="thermal_%02d_END" % i, fix=thermal.exit_fix)
+
+        kml.save(kml_filename)
+
+    def dump_to_csv(self, track_filename, thermals_filename):
+        """Dumps flight data to CSV files.
+
+        Args:
+            track_filename: a string, the name of the output CSV with fixes data
+            thermals_filename: a string, the name of the output CSV with thermals data
+        """
+        with open(track_filename, 'wt') as csv:
+            csv.write("timestamp,lat,lon,bearing,bearing_change_rate,gsp,flying,circling\n")
+            for fix in self.fixes:
+                csv.write("%f,%f,%f,%f,%f,%f,%s,%s\n" % (
+                    fix.timestamp, fix.lat, fix.lon, fix.bearing, fix.bearing_change_rate,
+                    fix.gsp, str(fix.flying), str(fix.circling)))
+
+        with open(thermals_filename, 'wt') as csv:
+            csv.write("timestamp_enter,timestamp_exit\n")
+            for thermal in self.thermals:
+                csv.write("%f,%f\n" % (thermal.enter_fix.timestamp, thermal.exit_fix.timestamp))

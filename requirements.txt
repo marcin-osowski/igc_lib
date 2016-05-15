@@ -1,1 +1,2 @@
 BioPython >= 1.63b
+simplekml >= 1.2.2
