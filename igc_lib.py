@@ -145,6 +145,7 @@ class GNSSFix:
         self.press_alt = press_alt
         self.gnss_alt = gnss_alt
         self.extras = extras
+        self.flight = None
 
     def set_flight(self, flight):
         """Sets parent Flight object."""
@@ -161,10 +162,9 @@ class GNSSFix:
         return self.__str__()
 
     def __str__(self):
-        return (("GNSSFix(rawtime=%02d:%02d:%02d, lat=%f, lon=%f, "
-                 "validity=%s, press_alt=%.1f, gnss_alt=%.1f, extras=%s)") %
-                    (rawtime_float_to_hms(self.rawtime) + (self.lat, self.lon,
-                     self.validity, self.press_alt, self.gnss_alt, self.extras)))
+        return (("GNSSFix(rawtime=%02d:%02d:%02d, lat=%f, lon=%f, altitide=%.1f)") %
+                    (rawtime_float_to_hms(self.rawtime)
+                     + (self.lat, self.lon, self.alt)))
 
     def bearing_to(self, other):
         """Computes bearing in degrees to another GNSSFix."""
@@ -259,7 +259,7 @@ class Thermal:
         return self.__str__()
 
     def __str__(self):
-        return ("Thermal(vertical_velocity=%.2f [m/s], enter=%s, exit=%s)" %
+        return ("Thermal(vertical_velocity=%.2f m/s, enter=%s, exit=%s)" %
                      (self.vertical_velocity(), str(self.enter_fix), str(self.exit_fix)))
     
 class Glide:
@@ -271,14 +271,14 @@ class Glide:
 
     def rawtime_change(self):
         return self.exit_fix.rawtime - self.enter_fix.rawtime
-                               
+
     def speed(self):
         return self.track_length / (self.rawtime_change() / 3600.0)
        
     
     def alt_change(self):
         return self.enter_fix.alt - self.exit_fix.alt 
-                               
+
     def glide_ratio(self):
         if math.fabs(self.rawtime_change()) < 1e-7:
             return 0.0
@@ -286,17 +286,17 @@ class Glide:
     
     def duration(self):
         hms = rawtime_float_to_hms(self.rawtime_change())
-        return ("%d m %d s" % (hms.minutes, hms.seconds))
-        
+        return ("%dm %ds" % (hms.minutes, hms.seconds))
 
-    
     def __repr__(self):
         return self.__str__()
  
     def __str__(self):
-        return ("Glide (distance=%.2f km, speed =%.2f kph, average L/D = %.2f :1 duration= %s, start=%s, end=%s)" %
-                     (self.track_length, self.speed(), self.glide_ratio(), self.duration(), str(self.enter_fix), str(self.exit_fix)))                                                                        
-                                                                     
+        return ("Glide (dist=%.2f km, speed=%.2f kph, avg L/D=%.2f, duration=%s, start=%s, end=%s)" %
+                (self.track_length, self.speed(), self.glide_ratio(), self.duration(),
+                 str(self.enter_fix), str(self.exit_fix)))
+
+
 class Flight:
     """Parses IGC file, detects thermals and checks for record anomalies.
 
