@@ -572,7 +572,6 @@ class Flight:
                     % (igc_lib_config.MAX_NEW_DAYS_IN_FLIGHT, days_added))
             self.valid = False
 
-
     def _compute_ground_speeds(self):
         """Adds ground speed info (km/h) to self.fixes."""
         self.fixes[0].gsp = 0.0
@@ -585,7 +584,7 @@ class Flight:
                 self.fixes[i].gsp = dist/rawtime*3600.0
 
     def _compute_flight(self):
-        """Adds boolean flag .flying to self.fixes, and chooses takeoff/landing fixes."""
+        """Adds boolean flag .flying to self.fixes."""
         flight_list = []
         for fix in self.fixes:
             if fix.gsp > igc_lib_config.MIN_GSP_FLIGHT:
@@ -656,17 +655,21 @@ class Flight:
                 rawtime_change = self.fixes[prev_fix].rawtime - self.fixes[curr_fix].rawtime
                 self.fixes[curr_fix].bearing_change_rate = bearing_change/rawtime_change
 
-
-    def _compute_circling(self):
-        """Adds .circling to self.fixes."""
-        rate_change_list = []
+    def _circling_emissions(self):
+        """Generates raw circling/straight emissions from bearing change."""
+        emissions_list = []
         for fix in self.fixes:
             bearing_change_enough = (
                 math.fabs(fix.bearing_change_rate) > igc_lib_config.DEG_PER_SEC_MIN_FOR_CIRCLING)
             if fix.flying and bearing_change_enough:
-                rate_change_list.append('C')
+                emissions_list.append('C')
             else:
-                rate_change_list.append('S')
+                emissions_list.append('S')
+        return ''.join(emissions_list)
+
+    def _compute_circling(self):
+        """Adds .circling to self.fixes."""
+        emissions = self._circling_emissions()
 
         state_alphabet = Alphabet()
         state_alphabet.letters = list("cs")
@@ -674,19 +677,19 @@ class Flight:
         emissions_alphabet.letters = list("CS")
 
         mmb = MarkovModelBuilder(state_alphabet, emissions_alphabet)
-        mmb.set_initial_probabilities({'c': 0.0971, 's': 0.9029})
+        mmb.set_initial_probabilities({'c': 0.05, 's': 0.95})
         mmb.allow_all_transitions()
-        mmb.set_transition_score('c', 'c', 0.9402)
-        mmb.set_transition_score('c', 's', 0.0598)
-        mmb.set_transition_score('s', 'c', 0.0539)
-        mmb.set_transition_score('s', 's', 0.9461)
-        mmb.set_emission_score('c', 'C', 0.8128)
-        mmb.set_emission_score('c', 'S', 0.1872)
-        mmb.set_emission_score('s', 'C', 0.1601)
-        mmb.set_emission_score('s', 'S', 0.8399)
+        mmb.set_transition_score('c', 'c', 0.97)
+        mmb.set_transition_score('c', 's', 0.03)
+        mmb.set_transition_score('s', 'c', 0.02)
+        mmb.set_transition_score('s', 's', 0.98)
+        mmb.set_emission_score('c', 'C', 0.90)
+        mmb.set_emission_score('c', 'S', 0.10)
+        mmb.set_emission_score('s', 'C', 0.06)
+        mmb.set_emission_score('s', 'S', 0.94)
         mm = mmb.get_markov_model()
 
-        (output, score) = mm.viterbi(rate_change_list, state_alphabet)
+        (output, score) = mm.viterbi(emissions, state_alphabet)
 
         for i in xrange(len(self.fixes)):
             self.fixes[i].circling = (output[i] == 'c')
