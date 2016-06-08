@@ -5,7 +5,7 @@ import re
 from Bio.Alphabet import Alphabet
 from Bio.HMM.MarkovModel import MarkovModelBuilder
 
-import igc_lib_config
+EARTH_RADIUS_KM=6371.0
 
 def sphere_distance(lat1, lon1, lat2, lon2):
     """Computes the great circle distance on a unit sphere.
@@ -148,7 +148,7 @@ class GNSSFix:
     def distance_to(self, other):
         """Computes great circle distance in kilometers to another GNSSFix."""
         lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, other.lat, other.lon])
-        return igc_lib_config.EARTH_RADIUS_KM * sphere_distance(lat1, lon1, lat2, lon2)
+        return EARTH_RADIUS_KM * sphere_distance(lat1, lon1, lat2, lon2)
 
     def to_B_record(self):
         """Reconstructs an IGC B-record."""
@@ -217,14 +217,6 @@ class Thermal:
             return 0.0
         return self.alt_change() / self.rawtime_change()
 
-    def acceptable(self):
-        """Verifies the thermal against configured limits."""
-        vv = self.vertical_velocity()
-        if (vv > igc_lib_config.MAX_THERMAL_VERTICAL_VEL
-            or vv < igc_lib_config.MIN_THERMAL_VERTICAL_VEL):
-            return False
-        return self.rawtime_change() >= igc_lib_config.MIN_RAWTIME_CIRCLING - 1e-5
-
     def __repr__(self):
         return self.__str__()
 
@@ -266,6 +258,87 @@ class Glide:
                 (self.track_length, self.speed(), self.glide_ratio(), self.duration(),
                  str(self.enter_fix), str(self.exit_fix)))
 
+class FlightParsingConfig(object):
+    """Configuration for parsing an IGC file.
+
+    Defines a set of parameters used to validate a file, and to detect
+    thermals and flight mode. Details in individual functions.
+    """
+
+    # Flight validation options/limits.
+    def min_fixes(self):
+        """Minimum number of fixes in a file."""
+        return 50
+
+    def max_seconds_between_fixes(self):
+        """Maximum time between fixes, seconds.
+
+        Soft limit, some fixes are allowed to exceed."""
+        return 30.0
+
+    def min_seconds_between_fixes(self):
+        """Minimum time between fixes, seconds.
+
+        Soft limit, some fixes are allowed to exceed."""
+        return 1.0
+
+    def max_time_violations(self):
+        """Maximum number of fixes exceeding time between fix constraints."""
+        return 10
+
+    def max_new_days_in_flight(self):
+        """Maximum number of times a file can cross the 0:00 UTC time."""
+        return 2
+
+    def min_avg_abs_alt_change(self):
+        """Minimum average of absolute values of altitude changes in a file.
+
+        This is needed to discover altitude sensors (either pressure or
+        gps) that report either always constant altitude, or almost
+        always constant altitude, and therefore are invalid. The unit
+        is meters/fix.
+        """
+        return 0.01
+
+    def max_alt_change_rate(self):
+        """Maximum altitude change per second between fixes, meters per second.
+
+        Soft limit, some fixes are allowed to exceed."""
+        return 50.0
+
+    def max_alt_change_violations(self):
+        """Maximum number of fixes that can exceed the altitude change limit."""
+        return 3
+
+    def max_alt(self):
+        """Absolute maximum altitude, meters."""
+        return 10000.0
+
+    def min_alt(self):
+        """Absolute minimum altitude, meters."""
+        return -600.0
+
+    # Thermals and flight detection parameters.
+    def min_gsp_flight(self):
+        """Minimum ground speed to switch to flight mode, km/h."""
+        return 20.0
+
+    def min_bearing_change_circling(self):
+        """Minimum bearing change to enter a thermal, deg/sec."""
+        return 6.0
+
+    def min_time_for_bearing_change(self):
+        """Minimum time between fixes to calculate bearing change, seconds.
+
+        See the usage for a more detailed comment on why this is useful.
+        """
+        return 5.0
+
+    def min_time_for_thermal(self):
+        """Minimum time to consider circling a thermal, seconds."""
+        return 60.0
+
+
 
 class Flight:
     """Parses IGC file, detects thermals and checks for record anomalies.
@@ -279,15 +352,17 @@ class Flight:
     """
 
     @staticmethod
-    def create_from_file(filename):
+    def create_from_file(filename, config_class=FlightParsingConfig):
         """Creates an instance of Flight from a given file.
 
         Args:
-            filename: A string, the name of the input IGC file.
+            filename: a string, the name of the input IGC file
+            config_class: a class that implements FlightParsingConfig
 
         Returns:
             An instance of Flight built from the supplied IGC file.
         """
+        config = config_class()
         fixes = []
         a_records = []
         i_records = []
@@ -309,18 +384,19 @@ class Flight:
                     h_records.append(line)
                 else:
                     pass # Do not parse any other types of IGC records
-        flight = Flight(fixes, a_records, h_records, i_records)
+        flight = Flight(fixes, a_records, h_records, i_records, config)
         return flight
 
-    def __init__(self, fixes, a_records, h_records, i_records):
+    def __init__(self, fixes, a_records, h_records, i_records, config):
         """Initializer of the Flight class. Do not use directly."""
+        self.config = config
         self.fixes = fixes
         self.valid = True
         self.notes = []
-        if len(fixes) < igc_lib_config.MIN_FIXES:
+        if len(fixes) < self.config.min_fixes():
             self.notes.append(
                 "Error: This file has %d fixes, less than "
-                "the minimum %d." % (len(fixes), igc_lib_config.MIN_FIXES))
+                "the minimum %d." % (len(fixes), self.config.min_fixes()))
             self.valid = False
             return
 
@@ -467,65 +543,63 @@ class Flight:
             gnss_alt_delta = math.fabs(self.fixes[i+1].gnss_alt - self.fixes[i].gnss_alt)
             rawtime_delta = math.fabs(self.fixes[i+1].rawtime - self.fixes[i].rawtime)
             if rawtime_delta > 0.5:
-                if press_alt_delta / rawtime_delta > igc_lib_config.MAX_PRESS_ALT_CHANGE:
+                if press_alt_delta / rawtime_delta > self.config.max_alt_change_rate():
                     press_huge_changes_num += 1
                 else:
-                    press_chgs_sum += press_alt_delta 
-                if gnss_alt_delta / rawtime_delta > igc_lib_config.MAX_GNSS_ALT_CHANGE:
+                    press_chgs_sum += press_alt_delta
+                if gnss_alt_delta / rawtime_delta > self.config.max_alt_change_rate():
                     gnss_huge_changes_num += 1
                 else:
                     gnss_chgs_sum += gnss_alt_delta
-            if (self.fixes[i].press_alt > igc_lib_config.MAX_PRESS_ALT
-                or self.fixes[i].press_alt < igc_lib_config.MIN_PRESS_ALT):
+            if (self.fixes[i].press_alt > self.config.max_alt()
+                or self.fixes[i].press_alt < self.config.min_alt()):
                 press_alt_violations_num += 1
-            if (self.fixes[i].gnss_alt > igc_lib_config.MAX_GNSS_ALT
-                or self.fixes[i].gnss_alt < igc_lib_config.MIN_GNSS_ALT):
+            if (self.fixes[i].gnss_alt > self.config.max_alt()
+                or self.fixes[i].gnss_alt < self.config.min_alt()):
                 gnss_alt_violations_num += 1
         press_chgs_avg = press_chgs_sum / float(len(self.fixes) - 1)
         gnss_chgs_avg = gnss_chgs_sum / float(len(self.fixes) - 1)
 
         press_alt_ok = True
-        if press_chgs_avg < igc_lib_config.MIN_PRESS_ALT_CHANGE:
+        if press_chgs_avg < self.config.min_avg_abs_alt_change():
             self.notes.append(
                 "Warning: average pressure altitude change between fixes is: %f. "
-                "It is lower than the minimum: %f"
-                    % (press_chgs_avg, igc_lib_config.MIN_PRESS_ALT_CHANGE))
+                "It is lower than the minimum: %f."
+                    % (press_chgs_avg, self.config.min_avg_abs_alt_change()))
             press_alt_ok = False
 
-        if press_huge_changes_num > igc_lib_config.MAX_PRESS_ALT_CHANGE_NUM:
+        if press_huge_changes_num > self.config.max_alt_change_violations():
             self.notes.append(
                 "Warning: too many high changes in pressure altitude: %d. "
                 "Maximum allowed: %d."
-                    % (press_huge_changes_num, igc_lib_config.MAX_PRESS_ALT_CHANGE_NUM))
+                    % (press_huge_changes_num, self.config.max_alt_change_violations()))
             press_alt_ok = False
 
-        if press_alt_violations_num > igc_lib_config.ALLOWED_PRESS_ALT_VIOLATION_NUM:
+        if press_alt_violations_num > 0:
             self.notes.append(
-                "Warning: too many fixes exceed pressure alt limits: %d. "
-                "Maximum allowed: %d."
-                    % (press_alt_violations_num, igc_lib_config.ALLOWED_PRESS_ALT_VIOLATION_NUM))
+                "Warning: pressure altitude limits exceeded in %d fixes."
+                    % (press_alt_violations_num))
             press_alt_ok = False
 
         gnss_alt_ok = True
-        if gnss_chgs_avg < igc_lib_config.MIN_GNSS_ALT_CHANGE:
+        if gnss_chgs_avg < self.config.min_avg_abs_alt_change():
             self.notes.append(
                 "Warning: average gnss altitude change between fixes is: %f. "
                 "It is lower than the minimum: %f."
-                    % (gnss_chgs_avg, igc_lib_config.MIN_GNSS_ALT_CHANGE))
+                    % (gnss_chgs_avg, self.config.min_avg_abs_alt_change()))
             gnss_alt_ok = False
 
-        if gnss_huge_changes_num > igc_lib_config.MAX_GNSS_ALT_CHANGE_NUM:
+        if gnss_huge_changes_num > self.config.max_alt_change_violations():
             self.notes.append(
                 "Warning: too many high changes in gnss altitude: %d. "
                 "Maximum allowed: %d."
-                    % (gnss_huge_changes_num, igc_lib_config.MAX_GNSS_ALT_CHANGE_NUM))
+                    % (gnss_huge_changes_num, self.config.max_alt_change_violations()))
             gnss_alt_ok = False
 
-        if gnss_alt_violations_num > igc_lib_config.ALLOWED_GNSS_ALT_VIOLATION_NUM:
+        if gnss_alt_violations_num > 0:
             self.notes.append(
-                "Warning: too many fixes exceed gnss alt limits: %d. "
-                "Maximum allowed: %d."
-                    % (gnss_alt_violations_num, igc_lib_config.ALLOWED_GNSS_ALT_VIOLATION_NUM))
+                "Warning: gnss altitude limits exceeded in %d fixes."
+                    % (gnss_alt_violations_num))
             gnss_alt_ok = False
 
         self.press_alt_valid = press_alt_ok
@@ -555,21 +629,24 @@ class Flight:
                 rawtime_to_add += DAY
                 f1.rawtime += DAY
 
-            if not (igc_lib_config.MIN_RAWTIME_BETWEEN_FIXES < f1.rawtime - f0.rawtime + 1e-5 and
-                    igc_lib_config.MAX_RAWTIME_BETWEEN_FIXES > f1.rawtime - f0.rawtime - 1e-5):
+            time_change = f1.rawtime - f0.rawtime
+            if time_change < self.config.min_seconds_between_fixes() - 1e-5:
+                rawtime_between_fix_exceeded += 1
+            if time_change > self.config.max_seconds_between_fixes() + 1e-5:
                 rawtime_between_fix_exceeded += 1
 
-        if rawtime_between_fix_exceeded > igc_lib_config.MAX_RAWTIME_BETWEEN_FIX_EXCEED:
+        if rawtime_between_fix_exceeded > self.config.max_time_violations():
             self.notes.append(
-                "Error: too many fixes intervals exceed rawtime constraints. "
-                " Allowed %d fixes, found %d fixes."
-                    % (igc_lib_config.MAX_RAWTIME_BETWEEN_FIX_EXCEED, rawtime_between_fix_exceeded))
+                "Error: too many fixes intervals exceed time between fixes "
+                "constraints. Allowed %d fixes, found %d fixes."
+                    % (self.config.max_time_violations(),
+                       rawtime_between_fix_exceeded))
             self.valid = False
-        if days_added > igc_lib_config.MAX_NEW_DAYS_IN_FLIGHT:
+        if days_added > self.config.max_new_days_in_flight():
             self.notes.append(
-                "Error: too many rawtimes the flight crossed UTC 0:00 barrier. "
-                "Allowed %d times, found %d times."
-                    % (igc_lib_config.MAX_NEW_DAYS_IN_FLIGHT, days_added))
+                "Error: too many times did the flight cross the UTC 0:00 "
+                "barrier. Allowed %d times, found %d times."
+                    % (self.config.max_new_days_in_flight(), days_added))
             self.valid = False
 
     def _compute_ground_speeds(self):
@@ -587,7 +664,7 @@ class Flight:
         """Adds boolean flag .flying to self.fixes."""
         flight_list = []
         for fix in self.fixes:
-            if fix.gsp > igc_lib_config.MIN_GSP_FLIGHT:
+            if fix.gsp > self.config.min_gsp_flight():
                 flight_list.append("F")
             else:
                 flight_list.append("S")
@@ -626,8 +703,8 @@ class Flight:
 
         Computing bearing change rate between neighboring fixes proved
         itself to be noisy on tracks recorded with minimum interval (1 second).
-        Therefore we compute rates between points that are at least X seconds
-        apart.
+        Therefore we compute rates between points that are at least
+        min_time_for_bearing_change seconds apart.
         """
         def find_prev_fix(curr_fix):
             """Computes the previous fix to be used in bearing rate change calculation."""
@@ -635,7 +712,7 @@ class Flight:
             for i in xrange(curr_fix - 1, 0, -1):
                 time_dist = math.fabs(self.fixes[curr_fix].timestamp
                     - self.fixes[i].timestamp)
-                if time_dist + 1e-7 > igc_lib_config.FIX_TIME_DIST_FOR_CIRCLING:
+                if time_dist + 1e-7 > self.config.min_time_for_bearing_change():
                     prev_fix = i
                     break
             return prev_fix
@@ -659,8 +736,9 @@ class Flight:
         """Generates raw circling/straight emissions from bearing change."""
         emissions_list = []
         for fix in self.fixes:
+            bearing_change = math.fabs(fix.bearing_change_rate)
             bearing_change_enough = (
-                math.fabs(fix.bearing_change_rate) > igc_lib_config.DEG_PER_SEC_MIN_FOR_CIRCLING)
+                bearing_change > self.config.min_bearing_change_circling())
             if fix.flying and bearing_change_enough:
                 emissions_list.append('C')
             else:
@@ -720,7 +798,7 @@ class Flight:
                 # Just ended circling
                 circling_now = False
                 thermal = Thermal(first_fix, fix)
-                if thermal.acceptable():
+                if thermal.rawtime_change() > self.config.min_time_for_thermal() - 1e-5:
                     self.thermals.append(thermal)
                     # glide ends at start of thermal
                     glide = Glide(first_glide_fix, first_fix, distance_start_circling)
