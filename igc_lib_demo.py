@@ -23,7 +23,7 @@ if __name__ == "__main__":
     print "flight =", flight
     print "fixes[0] =", flight.fixes[0]
     for x, (thermal, glide) in enumerate(zip(flight.thermals, flight.glides)):
-        print "glide[%d] " % x, glide
+        print "glide[%d] = " % x, glide
         print "thermals[%d] = " % x, thermal
 
     print "Dumping thermals to %s, %s and %s" % (wpt_file, cup_file, thermals_csv_file)
