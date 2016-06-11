@@ -343,12 +343,35 @@ class FlightParsingConfig(object):
 class Flight:
     """Parses IGC file, detects thermals and checks for record anomalies.
 
-    Attributes (the list is not complete):
-        fixes: a list of GNSSFix objects, one per each valid B record
-        thermals: a list of Thermal objects, the detected thermals
+    Before using an instance of Flight check the `valid` attribute. An
+    invalid Flight instance is not usable.
+
+    General sttributes:
         valid: a bool, whether the supplied record is considered valid
         notes: a list of strings, warnings and errors encountered while
         parsing/validating the file
+        fixes: a list of GNSSFix objects, one per each valid B record
+        thermals: a list of Thermal objects, the detected thermals
+        glides: a list of Glide objects, the glides between thermals
+
+    IGC metadata attributes (some might be missing if the flight does not
+    define them):
+        glider_type: a string, the declared glider type
+        competition_class: a string, the declared competition class
+        fr_manuf_code: a string, the flight recorder manufaturer code
+        fr_uniq_id: a string, the flight recorded unique id
+        i_record: a string, the I record (describing B record extensions)
+        fr_firmware_version: a string, the version of the recorder firmware
+        fr_hardware_version: a string, the version of the recorder hardware
+        fr_recorder_type: a string, the type of the recorder
+        fr_gps_receiver: a string, the used GPS receiver
+        fr_pressure_sensor: a string, the used pressure sensor
+
+    Other attributes:
+        alt_source: a string, the chosen altitude sensor,
+        either "PRESS" or "GNSS"
+        press_alt_valid: a bool, whether the pressure altitude sensor is OK
+        gnss_alt_valid: a bool, whether the GNSS altitude sensor is OK
     """
 
     @staticmethod
@@ -483,13 +506,6 @@ class Flight:
                 record, flags=re.IGNORECASE)
             if match:
                 (self.glider_type,) = map(strip_non_printable_chars, match.groups())
-        elif record[0:5] == 'HFDTM':
-            match = re.match(
-                'HFDTM(\d\d\d)[ A-Z]*:[ ]*(.*)',
-                record, flags=re.IGNORECASE)
-            if match:
-                code, name = map(strip_non_printable_chars, match.groups())
-                self.fr_gps_datum = "%s-%s" % (code, name)
         elif record[0:5] == 'HFRFW' or record[0:5] == 'HFRHW':
             match = re.match(
                 'HFR[FH]W[ ]*FIRMWARE[ ]*VERSION[ ]*:[ ]*(.*)',
@@ -526,7 +542,7 @@ class Flight:
 
     def __str__(self):
         descr = "Flight(valid=%s, fixes: %d" % (str(self.valid), len(self.fixes))
-        if self.__dict__.get('thermals', None) is not None:
+        if hasattr(self, 'thermals'):
             descr += ", thermals: %d" % len(self.thermals)
         descr += ")"
         return descr
