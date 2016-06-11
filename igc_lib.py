@@ -96,7 +96,7 @@ class Turnpoint:
         returns true if the fix is within the radius"""
         lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, fix.lat, fix.lon])
         
-        if (EARTH_RADIUS_KM * sphere_distance(lat1, lon1, lat2, lon2)) < self.radius:
+        if (EARTH_RADIUS_KM * _sphere_distance(lat1, lon1, lat2, lon2)) < self.radius:
             return True
         else:
             return False

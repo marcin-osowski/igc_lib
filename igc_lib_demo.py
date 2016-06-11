@@ -37,5 +37,4 @@ if __name__ == "__main__":
     
     task = igc_lib.Task.create_from_lkt_file(task_file)
     
-    print task.turnpoints[0].sort
-    task.check_flight(flight)
+    print task.check_flight(flight)
