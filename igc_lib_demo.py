@@ -7,11 +7,12 @@ import dumpers
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 3:
         print "Please pass an .igc file in argv"
         sys.exit(1)
 
     input_file = sys.argv[1]
+    task_file = sys.argv[2]
     input_base_file = os.path.splitext(input_file)[0]
     wpt_file = "%s-thermals.wpt" % input_base_file
     cup_file = "%s-thermals.cup" % input_base_file
@@ -33,3 +34,8 @@ if __name__ == "__main__":
     print "Dumping flight to %s and %s" % (kml_file, flight_csv_file)
     dumpers.dump_flight_to_csv(flight, flight_csv_file, thermals_csv_file)
     dumpers.dump_flight_to_kml(flight, kml_file)
+    
+    task = igc_lib.Task.create_from_lkt_file(task_file)
+    
+    print task.turnpoints[0].sort
+    task.check_flight(flight)

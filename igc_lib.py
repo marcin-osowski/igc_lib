@@ -4,6 +4,9 @@ import math
 import re
 from Bio.Alphabet import Alphabet
 from Bio.HMM.MarkovModel import MarkovModelBuilder
+from xml.dom.minidom import parse
+import xml.dom.minidom
+from collections import defaultdict
 
 EARTH_RADIUS_KM=6371.0
 
@@ -55,7 +58,148 @@ def rawtime_float_to_hms(timef):
     
     return hms((time/3600), (time%3600)/60, time%60)
 
+class Turnpoint:
+    """ single turnpoint in a task.
+    
+    Attributes: 
+        lat:
+        lon:
+        radius: radius of cylinder or line in km
+        sort: type of turnpoint; start_exit, start_enter, cylinder, ESS, goal_cylinder, goal_line
+        
+    """
+    def __init__(self, lat, lon, radius, sort):
+        self.lat = lat
+        self.lon = lon
+        self.radius = radius
+        self.sort = sort
+        
 
+    def in_radius(self, fix):
+        """Computes great circle distance in kilometers to a GNSSFix.
+        returns true if the fix is within the radius"""
+        lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, fix.lat, fix.lon])
+        
+        if (EARTH_RADIUS_KM * sphere_distance(lat1, lon1, lat2, lon2)) < self.radius:
+            return True
+        else:
+            return False
+        
+        
+class Task:
+    
+    
+    @staticmethod
+    def create_from_lkt_file(filename):
+        """ Creates Task from LK8000 task file, which is in xml format.
+            LK8000 does not have ESS or task finish time.
+            For the goal, at the moment, Turnpoints can't handle goal cones or lines, for this reason we default to goal_cylinder.
+        """
+        
+        turnpoints = []
+                
+        # Open XML document using minidom parser
+        DOMTree = xml.dom.minidom.parse(filename)
+        task = DOMTree.documentElement
+
+        # Get the taskpoints, waypoints and time gate
+        taskpoints = task.getElementsByTagName("taskpoints")[0]
+        waypoints = task.getElementsByTagName("waypoints")[0]
+        gate = task.getElementsByTagName("time-gate")[0]
+
+        tpoints = taskpoints.getElementsByTagName("point")
+
+        wpoints = waypoints.getElementsByTagName("point")
+
+        start_time = gate.getAttribute("open-time")
+
+        start_time = int(start_time.split(':')[0])*3600 + int(start_time.split(':')[1])*60
+        
+        #create a dictionary of names and a list of longitudes and latitudes as the waypoints co-ordinates are stored separate to turnpoint details
+        coords = defaultdict(list)
+        
+        for point in wpoints:    
+            coords[point.getAttribute("name")].append(float(point.getAttribute("longitude")))
+            coords[point.getAttribute("name")].append(float(point.getAttribute("latitude")))
+            
+        # create list of turnpoints    
+        for point in tpoints:
+            lat = coords[point.getAttribute("name")][1]
+            lon = coords[point.getAttribute("name")][0]
+            radius = float(point.getAttribute("radius"))/1000
+            
+            if point.getAttribute("idx") == "0":
+                if point.getAttribute("Exit") == "true":
+                    sort = "start_exit"
+                else:
+                    sort = "start_enter"
+            else:
+                if point == tpoints[-1]:   # if it is the last turnpoint i.e. the goal
+                    if point.getAttribute("type") == "line":
+                        sort = "goal_cylinder"     # to change one line can be processed.
+                    else:
+                        sort = "goal_cylinder"
+                else:
+                    sort = "cylinder"
+            
+                      
+            turnpoint = Turnpoint(lat, lon, radius, sort)
+            turnpoints.append(turnpoint)
+        task = Task(turnpoints, start_time)
+        return task
+    
+    
+    def __init__(self, turnpoints, start_time, end_time=86399):  #finish_time defaults to 23:59
+        self.turnpoints = turnpoints
+        self.start_time = start_time
+        self.end_time = end_time
+        
+        
+        
+    def check_flight(self, flight):
+        """ Checks a flight object against the task. 
+            Args:
+                   flight: a flight object
+            Returns:
+                    a list of rawtimes of when turnpoints were achieved.
+            
+        """
+        turnpoint_times = []   
+    
+        proceed_to_start = False
+        t=0
+        
+        for fix in flight.fixes:
+        
+            
+                if self.turnpoints[t].sort == "start_exit": #pilot must have at least 1 fix inside the start after the start time then exit
+                    if proceed_to_start:
+                        if not self.turnpoints[t].in_radius(fix):
+                            turnpoint_times.append(fix.rawtime)  #pilot has started
+                            t += 1
+                    if fix.rawtime > self.start_time and not proceed_to_start:
+                        if self.turnpoints[t].in_radius(fix):
+                            proceed_to_start = True         #pilot is inside start after the start time.
+                        
+                if self.turnpoints[t].sort == "start_enter":  #pilot must have at least 1 fix outside the start after the start time then enter
+                    if proceed_to_start:
+                        if self.turnpoints[t].in_radius(fix):
+                            turnpoint_times.append(fix.rawtime)  #pilot has started
+                            t += 1
+                    if fix.rawtime > self.start_time and not proceed_to_start:   
+                        if not self.turnpoints[t].in_radius(fix):
+                            proceed_to_start = True         #pilot is outside start after the start time.    
+            
+                if self.turnpoints[t].sort in ["cylinder", "ESS", "goal_cylinder"]:
+                    if self.turnpoints[t].in_radius(fix):
+                            turnpoint_times.append(fix.rawtime)  #pilot has achieved turnpoint
+                            t += 1
+                                                  
+                            if t >= len(self.turnpoints):
+                                break  # pilot has arrived in goal (last turnpoint) so we can stop.
+        return turnpoint_times       
+        
+    
 class GNSSFix:
     """Stores single GNSS flight recorder fix (a B-record).
 
