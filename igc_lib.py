@@ -1,3 +1,18 @@
+"""A simple library for parsing IGC files.
+
+Main abstraction defined in this file is the Flight class, which
+represents a parsed IGC file. A Flight is a collection of:
+    GNNSFix objects, one per B record in the original file,
+    IGC metadata, extracted from A/I/H records
+    a list of detected Thermals,
+    a list of detected Glides.
+
+For example usage see the attached igc_lib_demo.py file. Please note
+that after creating a Flight instance you should always check for its
+validity via the `valid` attribute prior to using it, as many IGC
+records are broken.
+"""
+
 import collections
 import datetime
 import math
@@ -10,7 +25,8 @@ from collections import defaultdict
 
 EARTH_RADIUS_KM=6371.0
 
-def sphere_distance(lat1, lon1, lat2, lon2):
+
+def _sphere_distance(lat1, lon1, lat2, lon2):
     """Computes the great circle distance on a unit sphere.
 
     All angles and the return value are in radians.
@@ -30,9 +46,9 @@ def sphere_distance(lat1, lon1, lat2, lon2):
     return 2.0 * math.asin(math.sqrt(a))
 
 
-def strip_non_printable_chars(string):
+def _strip_non_printable_chars(string):
     """Filters a string removing non-printable characters.
-    
+
     Args:
         string: A string to be filtered.
 
@@ -44,18 +60,18 @@ def strip_non_printable_chars(string):
     return filter(lambda x: x in printable, string)
 
 
-def rawtime_float_to_hms(timef):
+def _rawtime_float_to_hms(timef):
     """Converts time from floating point seconds to hours/minutes/seconds.
-    
+
     Args:
         timef: A floating point time in seconds to be converted
-        
+
     Returns:
         A namedtuple with hours, minutes and seconds elements
     """
     time = int(round(timef))
     hms = collections.namedtuple('hms', ['hours', 'minutes', 'seconds'])
-    
+
     return hms((time/3600), (time%3600)/60, time%60)
 
 class Turnpoint:
@@ -203,27 +219,35 @@ class Task:
 class GNSSFix:
     """Stores single GNSS flight recorder fix (a B-record).
 
-        Raw attributes:
-            rawtime: a float, time since last midnight, UTC, seconds
-            timestamp: a float, true timestamp (i.e. since epoch), UTC, seconds
-            lat: a float, latitude in degrees
-            lon: a float, longitude in degrees
-            validity: a string, GPS validity information from flight recorder
-            press_alt: a float, pressure altitude, meters
-            gnss_alt: a float, GNSS altitude, meters
-            extras: a string, B record extensions
+    Raw attributes (i.e. attributes read directly from the B record):
+        rawtime: a float, time since last midnight, UTC, seconds
+        lat: a float, latitude in degrees
+        lon: a float, longitude in degrees
+        validity: a string, GPS validity information from flight recorder
+        press_alt: a float, pressure altitude, meters
+        gnss_alt: a float, GNSS altitude, meters
+        extras: a string, B record extensions
 
-        Derived attributes:
-            alt: a float, either press_alt or gnss_alt
-            gsp: a float, current ground speed, km/h
-            bearing: a float, aircraft bearing, in degrees
-            bearing_change_rate: a float, bearing change rate, degrees/second
-            flying: a bool, whether this fix is during a flight
-            circling: a bool, whether this fix is inside a thermal
+    Derived attributes:
+        timestamp: a float, true timestamp (since epoch), UTC, seconds
+        alt: a float, either press_alt or gnss_alt
+        gsp: a float, current ground speed, km/h
+        bearing: a float, aircraft bearing, in degrees
+        bearing_change_rate: a float, bearing change rate, degrees/second
+        flying: a bool, whether this fix is during a flight
+        circling: a bool, whether this fix is inside a thermal
     """
+
     @staticmethod
     def build_from_B_record(B_record_line):
-        """Creates CNSSFix object from IGC B-record line."""
+        """Creates GNSSFix object from IGC B-record line.
+
+        Args:
+            B_record_line: a string, B record line from an IGC file
+
+        Returns:
+            The created GNSSFix object
+        """
         match = re.match('^B' + '(\d\d)(\d\d)(\d\d)' + '(\d\d)(\d\d)(\d\d\d)([NS])'
                               + '(\d\d\d)(\d\d)(\d\d\d)([EW])' + '([AV])'
                               + '([-\d]\d\d\d\d)' + '([-\d]\d\d\d\d)'
@@ -277,7 +301,7 @@ class GNSSFix:
 
     def __str__(self):
         return (("GNSSFix(rawtime=%02d:%02d:%02d, lat=%f, lon=%f, altitide=%.1f)") %
-                    (rawtime_float_to_hms(self.rawtime)
+                    (_rawtime_float_to_hms(self.rawtime)
                      + (self.lat, self.lon, self.alt)))
 
     def bearing_to(self, other):
@@ -292,7 +316,7 @@ class GNSSFix:
     def distance_to(self, other):
         """Computes great circle distance in kilometers to another GNSSFix."""
         lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, other.lat, other.lon])
-        return EARTH_RADIUS_KM * sphere_distance(lat1, lon1, lat2, lon2)
+        return EARTH_RADIUS_KM * _sphere_distance(lat1, lon1, lat2, lon2)
 
     def to_B_record(self):
         """Reconstructs an IGC B-record."""
@@ -336,8 +360,9 @@ class GNSSFix:
                   + ("%05d%05d" % (press_alt, gnss_alt))
                   + (extras))
 
+
 class Thermal:
-    """Stores information about a single thermal in a flight.
+    """Represents a single thermal detected in a flight.
 
     Attributes:
         enter_fix: a GNSSFix, entry point of the thermal
@@ -347,60 +372,73 @@ class Thermal:
         self.enter_fix = enter_fix
         self.exit_fix = exit_fix
 
-    def rawtime_change(self):
-        """Returns the time spent in the thermal."""
+    def time_change(self):
+        """Returns the time spent in the thermal, seconds."""
         return self.exit_fix.rawtime - self.enter_fix.rawtime
 
     def alt_change(self):
-        """Returns the altitude gained/lost in the thermal."""
+        """Returns the altitude gained/lost in the thermal, meters."""
         return self.exit_fix.alt - self.enter_fix.alt
 
     def vertical_velocity(self):
-        """Returns average vertical velocity in the thermal."""
-        if math.fabs(self.rawtime_change()) < 1e-7:
+        """Returns average vertical velocity in the thermal, m/s."""
+        if math.fabs(self.time_change()) < 1e-7:
             return 0.0
-        return self.alt_change() / self.rawtime_change()
+        return self.alt_change() / self.time_change()
 
     def __repr__(self):
         return self.__str__()
 
     def __str__(self):
-        return ("Thermal(vertical_velocity=%.2f m/s, enter=%s, exit=%s)" %
-                     (self.vertical_velocity(), str(self.enter_fix), str(self.exit_fix)))
-    
+        hms = _rawtime_float_to_hms(self.time_change())
+        return ("Thermal(vertical_velocity=%.2f m/s, duration=%dm %ds)" %
+                (self.vertical_velocity(), hms.minutes, hms.seconds))
+
+
 class Glide:
+    """Represents a single glide detected in a flight.
+
+    Glides are portions of the recorded track between thermals.
+
+    Attributes:
+        enter_fix: a GNSSFix, entry point of the glide
+        exit_fix: a GNSSFix, exit point of the glide
+        track_length: a float, the total length, in kilometers, of the recorded
+        track, between the entry point and the exit point; note that this is
+        not the same as the distance between these points
+    """
 
     def __init__(self, enter_fix, exit_fix, track_length):
         self.enter_fix = enter_fix
         self.exit_fix = exit_fix
         self.track_length = track_length
 
-    def rawtime_change(self):
-        return self.exit_fix.rawtime - self.enter_fix.rawtime
+    def time_change(self):
+        """Returns the time spent in the glide, seconds."""
+        return self.exit_fix.timestamp - self.enter_fix.timestamp
 
     def speed(self):
-        return self.track_length / (self.rawtime_change() / 3600.0)
-       
-    
+        """Returns the average speed in the glide, km/h."""
+        return self.track_length / (self.time_change() / 3600.0)
+
     def alt_change(self):
-        return self.enter_fix.alt - self.exit_fix.alt 
+        """Return the overall altitude change in the glide, meters."""
+        return self.enter_fix.alt - self.exit_fix.alt
 
     def glide_ratio(self):
-        if math.fabs(self.rawtime_change()) < 1e-7:
+        """Returns the L/D of the glide."""
+        if math.fabs(self.alt_change()) < 1e-7:
             return 0.0
         return (self.track_length * 1000.0) / self.alt_change()
-    
-    def duration(self):
-        hms = rawtime_float_to_hms(self.rawtime_change())
-        return ("%dm %ds" % (hms.minutes, hms.seconds))
 
     def __repr__(self):
         return self.__str__()
- 
+
     def __str__(self):
-        return ("Glide (dist=%.2f km, speed=%.2f kph, avg L/D=%.2f, duration=%s, start=%s, end=%s)" %
-                (self.track_length, self.speed(), self.glide_ratio(), self.duration(),
-                 str(self.enter_fix), str(self.exit_fix)))
+        hms = _rawtime_float_to_hms(self.time_change())
+        return ("Glide(dist=%.2f km, avg_speed=%.2f kph, avg L/D=%.2f duration=%dm %ds)" %
+                (self.track_length, self.speed(), self.glide_ratio(), hms.minutes, hms.seconds))
+
 
 class FlightParsingConfig(object):
     """Configuration for parsing an IGC file.
@@ -483,16 +521,38 @@ class FlightParsingConfig(object):
         return 60.0
 
 
-
 class Flight:
     """Parses IGC file, detects thermals and checks for record anomalies.
 
-    Attributes (the list is not complete):
-        fixes: a list of GNSSFix objects, one per each valid B record
-        thermals: a list of Thermal objects, the detected thermals
+    Before using an instance of Flight check the `valid` attribute. An
+    invalid Flight instance is not usable.
+
+    General sttributes:
         valid: a bool, whether the supplied record is considered valid
         notes: a list of strings, warnings and errors encountered while
         parsing/validating the file
+        fixes: a list of GNSSFix objects, one per each valid B record
+        thermals: a list of Thermal objects, the detected thermals
+        glides: a list of Glide objects, the glides between thermals
+
+    IGC metadata attributes (some might be missing if the flight does not
+    define them):
+        glider_type: a string, the declared glider type
+        competition_class: a string, the declared competition class
+        fr_manuf_code: a string, the flight recorder manufaturer code
+        fr_uniq_id: a string, the flight recorded unique id
+        i_record: a string, the I record (describing B record extensions)
+        fr_firmware_version: a string, the version of the recorder firmware
+        fr_hardware_version: a string, the version of the recorder hardware
+        fr_recorder_type: a string, the type of the recorder
+        fr_gps_receiver: a string, the used GPS receiver
+        fr_pressure_sensor: a string, the used pressure sensor
+
+    Other attributes:
+        alt_source: a string, the chosen altitude sensor,
+        either "PRESS" or "GNSS"
+        press_alt_valid: a bool, whether the pressure altitude sensor is OK
+        gnss_alt_valid: a bool, whether the GNSS altitude sensor is OK
     """
 
     @staticmethod
@@ -574,7 +634,7 @@ class Flight:
 
         for fix in self.fixes:
             fix.set_flight(self)
-                
+
         self._compute_ground_speeds()
         self._compute_flight()
         self._compute_bearings()
@@ -588,15 +648,15 @@ class Flight:
         A record contains the flight recorder manufacturer ID and
         device unique ID.
         """
-        self.fr_manuf_code = strip_non_printable_chars(a_records[0][1:4])
-        self.fr_uniq_id = strip_non_printable_chars(a_records[0][4:7])
+        self.fr_manuf_code = _strip_non_printable_chars(a_records[0][1:4])
+        self.fr_uniq_id = _strip_non_printable_chars(a_records[0][4:7])
 
     def _parse_i_records(self, i_records):
         """Parses the IGC I records.
 
         I records contain a description of extensions used in B records.
         """
-        self.i_record = strip_non_printable_chars(" ".join(i_records))
+        self.i_record = _strip_non_printable_chars(" ".join(i_records))
 
     def _parse_h_records(self, h_records):
         """Parses the IGC H records.
@@ -613,7 +673,7 @@ class Flight:
         if record[0:5] == 'HFDTE':
             match = re.match('HFDTE(\d\d)(\d\d)(\d\d)', record, flags=re.IGNORECASE)
             if match:
-                dd, mm, yy = map(strip_non_printable_chars, match.groups())
+                dd, mm, yy = map(_strip_non_printable_chars, match.groups())
                 year = int("20%s" % yy)
                 month = int(mm)
                 day = int(dd)
@@ -626,51 +686,44 @@ class Flight:
                 'HFGTY[ ]*GLIDER[ ]*TYPE[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.glider_type,) = map(strip_non_printable_chars, match.groups())
-        elif record[0:5] == 'HFDTM':
-            match = re.match(
-                'HFDTM(\d\d\d)[ A-Z]*:[ ]*(.*)',
-                record, flags=re.IGNORECASE)
-            if match:
-                code, name = map(strip_non_printable_chars, match.groups())
-                self.fr_gps_datum = "%s-%s" % (code, name)
+                (self.glider_type,) = map(_strip_non_printable_chars, match.groups())
         elif record[0:5] == 'HFRFW' or record[0:5] == 'HFRHW':
             match = re.match(
                 'HFR[FH]W[ ]*FIRMWARE[ ]*VERSION[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.fr_firmware_version,) = map(strip_non_printable_chars, match.groups())
+                (self.fr_firmware_version,) = map(_strip_non_printable_chars, match.groups())
             match = re.match(
                 'HFR[FH]W[ ]*HARDWARE[ ]*VERSION[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.fr_hardware_version,) = map(strip_non_printable_chars, match.groups())
+                (self.fr_hardware_version,) = map(_strip_non_printable_chars, match.groups())
         elif record[0:5] == 'HFFTY':
             match = re.match(
                 'HFFTY[ ]*FR[ ]*TYPE[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.fr_recorder_type,) = map(strip_non_printable_chars, match.groups())
+                (self.fr_recorder_type,) = map(_strip_non_printable_chars, match.groups())
         elif record[0:5] == 'HFGPS':
             match = re.match('HFGPS(?:[: ]|(?:GPS))*(.*)', record, flags=re.IGNORECASE)
             if match:
-                (self.fr_gps_receiver,) = map(strip_non_printable_chars, match.groups())
+                (self.fr_gps_receiver,) = map(_strip_non_printable_chars, match.groups())
         elif record[0:5] == 'HFPRS':
             match = re.match(
                 'HFPRS[ ]*PRESS[ ]*ALT[ ]*SENSOR[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.fr_pressure_sensor,) = map(strip_non_printable_chars, match.groups())
+                (self.fr_pressure_sensor,) = map(_strip_non_printable_chars, match.groups())
         elif record[0:5] == 'HFCCL':
             match = re.match(
                 'HFCCL[ ]*COMPETITION[ ]*CLASS[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.competition_class,) = map(strip_non_printable_chars, match.groups())
+                (self.competition_class,) = map(_strip_non_printable_chars, match.groups())
 
     def __str__(self):
         descr = "Flight(valid=%s, fixes: %d" % (str(self.valid), len(self.fixes))
-        if self.__dict__.get('thermals', None) is not None:
+        if hasattr(self, 'thermals'):
             descr += ", thermals: %d" % len(self.thermals)
         descr += ")"
         return descr
@@ -765,13 +818,11 @@ class Flight:
             f0 = self.fixes[i-1]
             f1 = self.fixes[i]
 
-            f1.rawtime += rawtime_to_add
-
             if f0.rawtime > f1.rawtime and f1.rawtime + DAY < f0.rawtime + 200.0:
                 # Day switch
                 days_added += 1
                 rawtime_to_add += DAY
-                f1.rawtime += DAY
+            f1.rawtime += rawtime_to_add
 
             time_change = f1.rawtime - f0.rawtime
             if time_change < self.config.min_seconds_between_fixes() - 1e-5:
@@ -832,7 +883,7 @@ class Flight:
         mm = mmb.get_markov_model()
 
         (output, score) = mm.viterbi(flight_list, state_alphabet)
-        
+
         for fix, output in zip(self.fixes, output):
             fix.flying = (output == 'f')
 
@@ -873,8 +924,8 @@ class Flight:
                         bearing_change += 360.0
                     else:
                         bearing_change -= 360.0
-                rawtime_change = self.fixes[prev_fix].rawtime - self.fixes[curr_fix].rawtime
-                self.fixes[curr_fix].bearing_change_rate = bearing_change/rawtime_change
+                time_change = self.fixes[prev_fix].timestamp - self.fixes[curr_fix].timestamp
+                self.fixes[curr_fix].bearing_change_rate = bearing_change/time_change
 
     def _circling_emissions(self):
         """Generates raw circling/straight emissions from bearing change."""
@@ -918,11 +969,10 @@ class Flight:
 
     def _find_thermals(self):
         """Goes through the fixes and finds the thermals.
-        
-        Every point not in a thermal is put into a glide.
-        
-        If we get to end of the fixes and there is still an open glide (i.e. flight not finishing in a valid thermal)
-        the glide will be closed. 
+
+        Every point not in a thermal is put into a glide.If we get to end of
+        the fixes and there is still an open glide (i.e. flight not finishing
+        in a valid thermal) the glide will be closed.
         """
         self.thermals = []
         self.glides = []
@@ -931,7 +981,7 @@ class Flight:
         first_fix = None
         first_glide_fix = None
         last_glide_fix = None
-        distance = 0.0# if we get to end of self.fixes and there is still an open glide (i.e. flight not finishing in a valid thermal)
+        distance = 0.0
         for fix in self.fixes:
             if not circling_now and fix.circling:
                 # Just started circling
@@ -942,13 +992,13 @@ class Flight:
                 # Just ended circling
                 circling_now = False
                 thermal = Thermal(first_fix, fix)
-                if thermal.rawtime_change() > self.config.min_time_for_thermal() - 1e-5:
+                if thermal.time_change() > self.config.min_time_for_thermal() - 1e-5:
                     self.thermals.append(thermal)
                     # glide ends at start of thermal
                     glide = Glide(first_glide_fix, first_fix, distance_start_circling)
                     self.glides.append(glide)
                     gliding_now = False
-                
+
             if gliding_now:
                 distance = distance + fix.distance_to(last_glide_fix)
                 last_glide_fix = fix
@@ -959,7 +1009,6 @@ class Flight:
                 gliding_now = True
                 distance = 0.0
 
-        
         if gliding_now:
             glide = Glide(first_glide_fix, last_glide_fix, distance)
             self.glides.append(glide)
