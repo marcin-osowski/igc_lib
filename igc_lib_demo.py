@@ -7,7 +7,7 @@ import dumpers
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 3:   #need to make the task file an optional argument and check if we have an igc file regardless.
         print "Please pass an .igc file in argv"
         sys.exit(1)
 

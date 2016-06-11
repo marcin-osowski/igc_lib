@@ -78,8 +78,8 @@ class Turnpoint:
     """ single turnpoint in a task.
     
     Attributes: 
-        lat:
-        lon:
+        lat: latitude as a float in degrees DD.DD
+        lon: longitude as a float in degrees DD.DD
         radius: radius of cylinder or line in km
         sort: type of turnpoint; start_exit, start_enter, cylinder, ESS, goal_cylinder, goal_line
         
