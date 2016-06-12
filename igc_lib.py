@@ -79,7 +79,12 @@ class Turnpoint:
         lat: a float, latitude in degrees 
         lon: a float, longitude in degrees
         radius: radius of cylinder or line in km
-        kind: type of turnpoint; "start_exit", "start_enter", "cylinder", "End_of_speed_section", "goal_cylinder", "goal_line"
+        kind: type of turnpoint; "start_exit", 
+                                 "start_enter", 
+                                 "cylinder", 
+                                 "End_of_speed_section", 
+                                 "goal_cylinder", 
+                                 "goal_line"
         
     """
     def __init__(self, lat, lon, radius, kind):
@@ -101,8 +106,10 @@ class Task:
     """Stores a task definition and checks if a flight has achieved the turnpoints in the task.
     Attributes: 
         turnpoints: A list of Turnpoint objects.
-        start_time: Raw time (seconds past midnight). The time the race starts. The pilots must start at or after this time.
-        end_time: Raw time (seconds past midnight). The time the race ends. The pilots must finish the race at or before this time. 
+        start_time: Raw time (seconds past midnight). The time the race starts. 
+                    The pilots must start at or after this time.
+        end_time: Raw time (seconds past midnight). The time the race ends. 
+                  The pilots must finish the race at or before this time. 
                   No credit is given for distance covered after this time.
     """
     
@@ -110,7 +117,8 @@ class Task:
     def create_from_lkt_file(filename):
         """ Creates Task from LK8000 task file, which is in xml format.
             LK8000 does not have ESS or task finish time.
-            For the goal, at the moment, Turnpoints can't handle goal cones or lines, for this reason we default to goal_cylinder.
+            For the goal, at the moment, Turnpoints can't handle goal cones or lines,
+            for this reason we default to goal_cylinder.
         """
                                
         # Open XML document using minidom parser
@@ -118,7 +126,7 @@ class Task:
         task = DOMTree.documentElement
 
         # Get the taskpoints, waypoints and time gate
-        taskpoints = task.getElementsByTagName("taskpoints")[0]
+        taskpoints = task.getElementsByTagName("taskpoints")[0] #TODO: add code to handle if these tags are missing.
         waypoints = task.getElementsByTagName("waypoints")[0]
         gate = task.getElementsByTagName("time-gate")[0]
         tpoints = taskpoints.getElementsByTagName("point")
@@ -127,9 +135,10 @@ class Task:
                
         start_hours, start_minutes = start_time.split(':')
         start_time = int(start_hours) * 3600 + int(start_minutes) * 60
-        end_time = 86399  #default end_time of 23:59
+        end_time = 23*3600 + 59*60 + 59  #default end_time of 23:59
         
-        #create a dictionary of names and a list of longitudes and latitudes as the waypoints co-ordinates are stored separate to turnpoint details
+        #create a dictionary of names and a list of longitudes and latitudes
+        #as the waypoints co-ordinates are stored separate to turnpoint details
         coords = defaultdict(list)
         
         for point in wpoints:    
@@ -147,7 +156,7 @@ class Task:
             lon = coords[point.getAttribute("name")][0]
             radius = float(point.getAttribute("radius"))/1000
             
-            if point.getAttribute("idx") == "0":
+            if point == tpoints[0]: #if it is the 1st turnpoint then it is a start
                 if point.getAttribute("Exit") == "true":
                     kind = "start_exit"
                 else:
@@ -155,11 +164,13 @@ class Task:
             else:
                 if point == tpoints[-1]:   # if it is the last turnpoint i.e. the goal
                     if point.getAttribute("type") == "line":
-                        kind = "goal_cylinder"     # to change once kind 'line' can be processed.
+                        kind = "goal_cylinder"    # TODO(kuaka): change to 'line' once we can process it 
                     else:
                         kind = "goal_cylinder"
                 else:
-                    kind = "cylinder"
+                    kind = "cylinder"  # All turnpoints other than the 1st and the last are "cylinders".
+                                       # In theory they could be "End_of_speed_section" but this is not supported by LK8000.
+                                       # For paragliders it would be safe to assume that the 2nd to last is always "End_of_speed_section"
             
                       
             turnpoint = Turnpoint(lat, lon, radius, kind)
@@ -168,7 +179,7 @@ class Task:
         return task
     
     
-    def __init__(self, turnpoints, start_time, end_time):  #finish_time defaults to 23:59
+    def __init__(self, turnpoints, start_time, end_time):
         self.turnpoints = turnpoints
         self.start_time = start_time
         self.end_time = end_time
@@ -188,6 +199,9 @@ class Task:
         for fix in Flight.fixes:
             if t >= len(self.turnpoints):
                 break  # pilot has arrived in goal (last turnpoint) so we can stop.
+            
+            if self.turnpoints[t].kind not in ["cylinder", "End_of_speed_section", "goal_cylinder", "start_enter", "start_exit"]:
+                assert False, "Unknown turnpoint kind: %s" % kind
         
             #pilot must have at least 1 fix inside the start after the start time then exit
             if self.turnpoints[t].kind == "start_exit": 
@@ -198,8 +212,9 @@ class Task:
                     if fix.rawtime > self.start_time and not proceed_to_start:
                         if self.turnpoints[t].in_radius(fix):
                             proceed_to_start = True         #pilot is inside start after the start time.
-                        
-            if self.turnpoints[t].kind == "start_enter":  #pilot must have at least 1 fix outside the start after the start time then enter
+                            
+            #pilot must have at least 1 fix outside the start after the start time then enter            
+            if self.turnpoints[t].kind == "start_enter":  
                 if proceed_to_start:
                     if self.turnpoints[t].in_radius(fix):
                         reached_turnpoints.append(fix)  #pilot has started
@@ -212,7 +227,8 @@ class Task:
                 if self.turnpoints[t].in_radius(fix):
                     reached_turnpoints.append(fix)  #pilot has achieved turnpoint
                     t += 1
-                                               
+
+                
         return reached_turnpoints       
         
 class GNSSFix:

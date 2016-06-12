@@ -9,6 +9,7 @@ import dumpers
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print "Usage: %s file.igc [file.lkt]" % sys.argv[0]
+        sys.exit(1)
 
     input_file = sys.argv[1]
     if len(sys.argv) > 2:
@@ -39,6 +40,6 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         task = igc_lib.Task.create_from_lkt_file(task_file)
         reached_turnpoints = task.check_flight(flight)
-        for t, (fix) in enumerate(reached_turnpoints):
+        for t, fix in enumerate(reached_turnpoints):
             print "Turnpoint[%d] achieved at:" % t, fix.rawtime
        
