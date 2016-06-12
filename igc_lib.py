@@ -116,7 +116,7 @@ class Task:
     @staticmethod
     def create_from_lkt_file(filename):
         """ Creates Task from LK8000 task file, which is in xml format.
-            LK8000 does not have ESS or task finish time.
+            LK8000 does not have End of Speed Section or task finish time.
             For the goal, at the moment, Turnpoints can't handle goal cones or lines,
             for this reason we default to goal_cylinder.
         """
