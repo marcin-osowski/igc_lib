@@ -7,12 +7,13 @@ import dumpers
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:   #need to make the task file an optional argument and check if we have an igc file regardless.
-        print "Please pass an .igc file in argv"
-        sys.exit(1)
+    if len(sys.argv) < 2:
+        print "Usage: %s file.igc [file.lkt]" % sys.argv[0]
 
     input_file = sys.argv[1]
-    task_file = sys.argv[2]
+    if len(sys.argv) > 2:
+        task_file = sys.argv[2]
+    
     input_base_file = os.path.splitext(input_file)[0]
     wpt_file = "%s-thermals.wpt" % input_base_file
     cup_file = "%s-thermals.cup" % input_base_file
@@ -35,6 +36,9 @@ if __name__ == "__main__":
     dumpers.dump_flight_to_csv(flight, flight_csv_file, thermals_csv_file)
     dumpers.dump_flight_to_kml(flight, kml_file)
     
-    task = igc_lib.Task.create_from_lkt_file(task_file)
-    
-    print task.check_flight(flight)
+    if len(sys.argv) > 2:
+        task = igc_lib.Task.create_from_lkt_file(task_file)
+        reached_turnpoints = task.check_flight(flight)
+        for t, (fix) in enumerate(reached_turnpoints):
+            print "Turnpoint[%d] achieved at:" % t, fix.rawtime
+       

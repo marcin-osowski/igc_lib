@@ -19,7 +19,6 @@ import math
 import re
 from Bio.Alphabet import Alphabet
 from Bio.HMM.MarkovModel import MarkovModelBuilder
-from xml.dom.minidom import parse
 import xml.dom.minidom
 from collections import defaultdict
 
@@ -76,34 +75,36 @@ def _rawtime_float_to_hms(timef):
 
 class Turnpoint:
     """ single turnpoint in a task.
-    
     Attributes: 
-        lat: latitude as a float in degrees DD.DD
-        lon: longitude as a float in degrees DD.DD
+        lat: a float, latitude in degrees 
+        lon: a float, longitude in degrees
         radius: radius of cylinder or line in km
-        sort: type of turnpoint; start_exit, start_enter, cylinder, ESS, goal_cylinder, goal_line
+        kind: type of turnpoint; "start_exit", "start_enter", "cylinder", "End_of_speed_section", "goal_cylinder", "goal_line"
         
     """
-    def __init__(self, lat, lon, radius, sort):
+    def __init__(self, lat, lon, radius, kind):
         self.lat = lat
         self.lon = lon
         self.radius = radius
-        self.sort = sort
+        self.kind = kind
+        assert kind in ["start_exit", "start_enter", "cylinder", "End_of_speed_section", "goal_cylinder", "goal_line"], \
+            "turnpoint type is not valid: %r" % kind
         
 
     def in_radius(self, fix):
-        """Computes great circle distance in kilometers to a GNSSFix.
-        returns true if the fix is within the radius"""
+        """Checks whether the provided GNSSFix is within the radius"""
         lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, fix.lat, fix.lon])
-        
-        if (EARTH_RADIUS_KM * _sphere_distance(lat1, lon1, lat2, lon2)) < self.radius:
-            return True
-        else:
-            return False
-        
+        distance = EARTH_RADIUS_KM * _sphere_distance(lat1, lon1, lat2, lon2)
+        return distance < self.radius
         
 class Task:
-    
+    """Stores a task definition and checks if a flight has achieved the turnpoints in the task.
+    Attributes: 
+        turnpoints: A list of Turnpoint objects.
+        start_time: Raw time (seconds past midnight). The time the race starts. The pilots must start at or after this time.
+        end_time: Raw time (seconds past midnight). The time the race ends. The pilots must finish the race at or before this time. 
+                  No credit is given for distance covered after this time.
+    """
     
     @staticmethod
     def create_from_lkt_file(filename):
@@ -111,9 +112,7 @@ class Task:
             LK8000 does not have ESS or task finish time.
             For the goal, at the moment, Turnpoints can't handle goal cones or lines, for this reason we default to goal_cylinder.
         """
-        
-        turnpoints = []
-                
+                               
         # Open XML document using minidom parser
         DOMTree = xml.dom.minidom.parse(filename)
         task = DOMTree.documentElement
@@ -122,23 +121,27 @@ class Task:
         taskpoints = task.getElementsByTagName("taskpoints")[0]
         waypoints = task.getElementsByTagName("waypoints")[0]
         gate = task.getElementsByTagName("time-gate")[0]
-
         tpoints = taskpoints.getElementsByTagName("point")
-
         wpoints = waypoints.getElementsByTagName("point")
-
         start_time = gate.getAttribute("open-time")
-
-        start_time = int(start_time.split(':')[0])*3600 + int(start_time.split(':')[1])*60
+               
+        start_hours, start_minutes = start_time.split(':')
+        start_time = int(start_hours) * 3600 + int(start_minutes) * 60
+        end_time = 86399  #default end_time of 23:59
         
         #create a dictionary of names and a list of longitudes and latitudes as the waypoints co-ordinates are stored separate to turnpoint details
         coords = defaultdict(list)
         
         for point in wpoints:    
-            coords[point.getAttribute("name")].append(float(point.getAttribute("longitude")))
-            coords[point.getAttribute("name")].append(float(point.getAttribute("latitude")))
+            name = point.getAttribute("name")
+            longitude = float(point.getAttribute("longitude"))
+            latitude = float(point.getAttribute("latitude"))
+            coords[name].append(longitude)
+            coords[name].append(latitude)
+
             
         # create list of turnpoints    
+        turnpoints = []
         for point in tpoints:
             lat = coords[point.getAttribute("name")][1]
             lon = coords[point.getAttribute("name")][0]
@@ -146,76 +149,72 @@ class Task:
             
             if point.getAttribute("idx") == "0":
                 if point.getAttribute("Exit") == "true":
-                    sort = "start_exit"
+                    kind = "start_exit"
                 else:
-                    sort = "start_enter"
+                    kind = "start_enter"
             else:
                 if point == tpoints[-1]:   # if it is the last turnpoint i.e. the goal
                     if point.getAttribute("type") == "line":
-                        sort = "goal_cylinder"     # to change one line can be processed.
+                        kind = "goal_cylinder"     # to change once kind 'line' can be processed.
                     else:
-                        sort = "goal_cylinder"
+                        kind = "goal_cylinder"
                 else:
-                    sort = "cylinder"
+                    kind = "cylinder"
             
                       
-            turnpoint = Turnpoint(lat, lon, radius, sort)
+            turnpoint = Turnpoint(lat, lon, radius, kind)
             turnpoints.append(turnpoint)
-        task = Task(turnpoints, start_time)
+        task = Task(turnpoints, start_time, end_time)
         return task
     
     
-    def __init__(self, turnpoints, start_time, end_time=86399):  #finish_time defaults to 23:59
+    def __init__(self, turnpoints, start_time, end_time):  #finish_time defaults to 23:59
         self.turnpoints = turnpoints
         self.start_time = start_time
         self.end_time = end_time
         
         
         
-    def check_flight(self, flight):
-        """ Checks a flight object against the task. 
+    def check_flight(self, Flight):
+        """ Checks a Flight object against the task. 
             Args:
-                   flight: a flight object
+                   Flight: a Flight object
             Returns:
-                    a list of rawtimes of when turnpoints were achieved.
-            
+                    a list of GNSSFixes of when turnpoints were achieved.            
         """
-        turnpoint_times = []   
-    
+        reached_turnpoints = []   
         proceed_to_start = False
         t=0
+        for fix in Flight.fixes:
+            if t >= len(self.turnpoints):
+                break  # pilot has arrived in goal (last turnpoint) so we can stop.
         
-        for fix in flight.fixes:
-        
-            
-                if self.turnpoints[t].sort == "start_exit": #pilot must have at least 1 fix inside the start after the start time then exit
+            #pilot must have at least 1 fix inside the start after the start time then exit
+            if self.turnpoints[t].kind == "start_exit": 
                     if proceed_to_start:
                         if not self.turnpoints[t].in_radius(fix):
-                            turnpoint_times.append(fix.rawtime)  #pilot has started
+                            reached_turnpoints.append(fix)  #pilot has started
                             t += 1
                     if fix.rawtime > self.start_time and not proceed_to_start:
                         if self.turnpoints[t].in_radius(fix):
                             proceed_to_start = True         #pilot is inside start after the start time.
                         
-                if self.turnpoints[t].sort == "start_enter":  #pilot must have at least 1 fix outside the start after the start time then enter
-                    if proceed_to_start:
-                        if self.turnpoints[t].in_radius(fix):
-                            turnpoint_times.append(fix.rawtime)  #pilot has started
-                            t += 1
-                    if fix.rawtime > self.start_time and not proceed_to_start:   
-                        if not self.turnpoints[t].in_radius(fix):
-                            proceed_to_start = True         #pilot is outside start after the start time.    
-            
-                if self.turnpoints[t].sort in ["cylinder", "ESS", "goal_cylinder"]:
+            if self.turnpoints[t].kind == "start_enter":  #pilot must have at least 1 fix outside the start after the start time then enter
+                if proceed_to_start:
                     if self.turnpoints[t].in_radius(fix):
-                            turnpoint_times.append(fix.rawtime)  #pilot has achieved turnpoint
-                            t += 1
-                                                  
-                            if t >= len(self.turnpoints):
-                                break  # pilot has arrived in goal (last turnpoint) so we can stop.
-        return turnpoint_times       
+                        reached_turnpoints.append(fix)  #pilot has started
+                        t += 1
+                if fix.rawtime > self.start_time and not proceed_to_start:   
+                    if not self.turnpoints[t].in_radius(fix):
+                        proceed_to_start = True         #pilot is outside start after the start time.    
+            
+            if self.turnpoints[t].kind in ["cylinder", "End_of_speed_section", "goal_cylinder"]:
+                if self.turnpoints[t].in_radius(fix):
+                    reached_turnpoints.append(fix)  #pilot has achieved turnpoint
+                    t += 1
+                                               
+        return reached_turnpoints       
         
-    
 class GNSSFix:
     """Stores single GNSS flight recorder fix (a B-record).
 
@@ -527,7 +526,7 @@ class Flight:
     Before using an instance of Flight check the `valid` attribute. An
     invalid Flight instance is not usable.
 
-    General sttributes:
+    General attributes:
         valid: a bool, whether the supplied record is considered valid
         notes: a list of strings, warnings and errors encountered while
         parsing/validating the file
