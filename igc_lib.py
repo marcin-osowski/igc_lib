@@ -22,7 +22,7 @@ from Bio.HMM.MarkovModel import MarkovModelBuilder
 import xml.dom.minidom
 from collections import defaultdict
 
-EARTH_RADIUS_KM=6371.0
+EARTH_RADIUS_KM = 6371.0
 
 
 def _sphere_distance(lat1, lon1, lat2, lon2):
@@ -71,22 +71,24 @@ def _rawtime_float_to_hms(timef):
     time = int(round(timef))
     hms = collections.namedtuple('hms', ['hours', 'minutes', 'seconds'])
 
-    return hms((time/3600), (time%3600)/60, time%60)
+    return hms((time/3600), (time % 3600)/60, time % 60)
+
 
 class Turnpoint:
     """ single turnpoint in a task.
-    Attributes: 
-        lat: a float, latitude in degrees 
+    Attributes:
+        lat: a float, latitude in degrees
         lon: a float, longitude in degrees
         radius: radius of cylinder or line in km
-        kind: type of turnpoint; "start_exit", 
-                                 "start_enter", 
-                                 "cylinder", 
-                                 "End_of_speed_section", 
-                                 "goal_cylinder", 
+        kind: type of turnpoint; "start_exit",
+                                 "start_enter",
+                                 "cylinder",
+                                 "End_of_speed_section",
+                                 "goal_cylinder",
                                  "goal_line"
-        
+
     """
+
     def __init__(self, lat, lon, radius, kind):
         self.lat = lat
         self.lon = lon
@@ -94,25 +96,24 @@ class Turnpoint:
         self.kind = kind
         assert kind in ["start_exit", "start_enter", "cylinder", "End_of_speed_section", "goal_cylinder", "goal_line"], \
             "turnpoint type is not valid: %r" % kind
-        
 
     def in_radius(self, fix):
         """Checks whether the provided GNSSFix is within the radius"""
         lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, fix.lat, fix.lon])
         distance = EARTH_RADIUS_KM * _sphere_distance(lat1, lon1, lat2, lon2)
         return distance < self.radius
-        
+
 class Task:
     """Stores a task definition and checks if a flight has achieved the turnpoints in the task.
-    Attributes: 
+    Attributes:
         turnpoints: A list of Turnpoint objects.
-        start_time: Raw time (seconds past midnight). The time the race starts. 
+        start_time: Raw time (seconds past midnight). The time the race starts.
                     The pilots must start at or after this time.
-        end_time: Raw time (seconds past midnight). The time the race ends. 
-                  The pilots must finish the race at or before this time. 
+        end_time: Raw time (seconds past midnight). The time the race ends.
+                  The pilots must finish the race at or before this time.
                   No credit is given for distance covered after this time.
     """
-    
+
     @staticmethod
     def create_from_lkt_file(filename):
         """ Creates Task from LK8000 task file, which is in xml format.
@@ -120,7 +121,7 @@ class Task:
             For the goal, at the moment, Turnpoints can't handle goal cones or lines,
             for this reason we default to goal_cylinder.
         """
-                               
+
         # Open XML document using minidom parser
         DOMTree = xml.dom.minidom.parse(filename)
         task = DOMTree.documentElement
@@ -132,103 +133,104 @@ class Task:
         tpoints = taskpoints.getElementsByTagName("point")
         wpoints = waypoints.getElementsByTagName("point")
         start_time = gate.getAttribute("open-time")
-               
+
         start_hours, start_minutes = start_time.split(':')
         start_time = int(start_hours) * 3600 + int(start_minutes) * 60
         end_time = 23*3600 + 59*60 + 59  #default end_time of 23:59
-        
-        #create a dictionary of names and a list of longitudes and latitudes
-        #as the waypoints co-ordinates are stored separate to turnpoint details
+
+        # create a dictionary of names and a list of longitudes and latitudes
+        # as the waypoints co-ordinates are stored separate to turnpoint details
         coords = defaultdict(list)
-        
-        for point in wpoints:    
+
+        for point in wpoints:
             name = point.getAttribute("name")
             longitude = float(point.getAttribute("longitude"))
             latitude = float(point.getAttribute("latitude"))
             coords[name].append(longitude)
             coords[name].append(latitude)
 
-            
-        # create list of turnpoints    
+
+        # create list of turnpoints
         turnpoints = []
         for point in tpoints:
             lat = coords[point.getAttribute("name")][1]
             lon = coords[point.getAttribute("name")][0]
             radius = float(point.getAttribute("radius"))/1000
-            
-            if point == tpoints[0]: #if it is the 1st turnpoint then it is a start
+
+            if point == tpoints[0]:  # if it is the 1st turnpoint then it is a start
                 if point.getAttribute("Exit") == "true":
                     kind = "start_exit"
                 else:
                     kind = "start_enter"
             else:
-                if point == tpoints[-1]:   # if it is the last turnpoint i.e. the goal
+                if point == tpoints[-1]:  # if it is the last turnpoint i.e. the goal
                     if point.getAttribute("type") == "line":
-                        kind = "goal_cylinder"    # TODO(kuaka): change to 'line' once we can process it 
+                        kind = "goal_cylinder"    # TODO(kuaka): change to 'line' once we can process it
                     else:
                         kind = "goal_cylinder"
                 else:
                     kind = "cylinder"  # All turnpoints other than the 1st and the last are "cylinders".
                                        # In theory they could be "End_of_speed_section" but this is not supported by LK8000.
                                        # For paragliders it would be safe to assume that the 2nd to last is always "End_of_speed_section"
-            
-                      
+
+
             turnpoint = Turnpoint(lat, lon, radius, kind)
             turnpoints.append(turnpoint)
         task = Task(turnpoints, start_time, end_time)
         return task
-    
-    
+
     def __init__(self, turnpoints, start_time, end_time):
         self.turnpoints = turnpoints
         self.start_time = start_time
         self.end_time = end_time
-        
-        
-        
+
     def check_flight(self, Flight):
-        """ Checks a Flight object against the task. 
+        """ Checks a Flight object against the task.
             Args:
                    Flight: a Flight object
             Returns:
-                    a list of GNSSFixes of when turnpoints were achieved.            
+                    a list of GNSSFixes of when turnpoints were achieved.
         """
-        reached_turnpoints = []   
+        reached_turnpoints = []
         proceed_to_start = False
         t=0
         for fix in Flight.fixes:
             if t >= len(self.turnpoints):
                 break  # pilot has arrived in goal (last turnpoint) so we can stop.
-   
-            #pilot must have at least 1 fix inside the start after the start time then exit
-            if self.turnpoints[t].kind == "start_exit": 
+
+            if self.end_time < fix.rawtime:
+                # Task has ended
+                break
+
+            # pilot must have at least 1 fix inside the start after the start time then exit
+            if self.turnpoints[t].kind == "start_exit":
                 if proceed_to_start:
                     if not self.turnpoints[t].in_radius(fix):
-                        reached_turnpoints.append(fix)  #pilot has started
+                        reached_turnpoints.append(fix)  # pilot has started
                         t += 1
                 if fix.rawtime > self.start_time and not proceed_to_start:
                     if self.turnpoints[t].in_radius(fix):
-                        proceed_to_start = True         #pilot is inside start after the start time.
-                            
-            #pilot must have at least 1 fix outside the start after the start time then enter            
-            elif self.turnpoints[t].kind == "start_enter":  
+                        proceed_to_start = True         # pilot is inside start after the start time.
+
+            # pilot must have at least 1 fix outside the start after the start time then enter
+            elif self.turnpoints[t].kind == "start_enter":
                 if proceed_to_start:
                     if self.turnpoints[t].in_radius(fix):
-                        reached_turnpoints.append(fix)  #pilot has started
+                        reached_turnpoints.append(fix)  # pilot has started
                         t += 1
-                if fix.rawtime > self.start_time and not proceed_to_start:   
+                if fix.rawtime > self.start_time and not proceed_to_start:
                     if not self.turnpoints[t].in_radius(fix):
-                        proceed_to_start = True         #pilot is outside start after the start time.    
-            
+                        proceed_to_start = True         # pilot is outside start after the start time.
+
             elif self.turnpoints[t].kind in ["cylinder", "End_of_speed_section", "goal_cylinder"]:
                 if self.turnpoints[t].in_radius(fix):
-                    reached_turnpoints.append(fix)  #pilot has achieved turnpoint
+                    reached_turnpoints.append(fix)  # pilot has achieved turnpoint
                     t += 1
             else:
-                assert False, "Unknown turnpoint kind: %s" % kind
-                
-        return reached_turnpoints       
-        
+                assert False, "Unknown turnpoint kind: %s" % self.turnpoints[t].kind
+
+        return reached_turnpoints
+
 class GNSSFix:
     """Stores single GNSS flight recorder fix (a B-record).
 
@@ -981,7 +983,7 @@ class Flight:
             self.fixes[i].circling = (output[i] == 'c')
 
     def _find_thermals(self):
-        """Goes through the fixes and finds the thermals.
+        """Go through the fixes and find the thermals.
 
         Every point not in a thermal is put into a glide.If we get to end of
         the fixes and there is still an open glide (i.e. flight not finishing
@@ -1016,7 +1018,7 @@ class Flight:
                 distance = distance + fix.distance_to(last_glide_fix)
                 last_glide_fix = fix
             else:
-                #just started gliding
+                # just started gliding
                 first_glide_fix = fix
                 last_glide_fix = fix
                 gliding_now = True
@@ -1025,4 +1027,3 @@ class Flight:
         if gliding_now:
             glide = Glide(first_glide_fix, last_glide_fix, distance)
             self.glides.append(glide)
-
