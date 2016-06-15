@@ -199,22 +199,19 @@ class Task:
         for fix in Flight.fixes:
             if t >= len(self.turnpoints):
                 break  # pilot has arrived in goal (last turnpoint) so we can stop.
-            
-            if self.turnpoints[t].kind not in ["cylinder", "End_of_speed_section", "goal_cylinder", "start_enter", "start_exit"]:
-                assert False, "Unknown turnpoint kind: %s" % kind
-        
+   
             #pilot must have at least 1 fix inside the start after the start time then exit
             if self.turnpoints[t].kind == "start_exit": 
-                    if proceed_to_start:
-                        if not self.turnpoints[t].in_radius(fix):
-                            reached_turnpoints.append(fix)  #pilot has started
-                            t += 1
-                    if fix.rawtime > self.start_time and not proceed_to_start:
-                        if self.turnpoints[t].in_radius(fix):
-                            proceed_to_start = True         #pilot is inside start after the start time.
+                if proceed_to_start:
+                    if not self.turnpoints[t].in_radius(fix):
+                        reached_turnpoints.append(fix)  #pilot has started
+                        t += 1
+                if fix.rawtime > self.start_time and not proceed_to_start:
+                    if self.turnpoints[t].in_radius(fix):
+                        proceed_to_start = True         #pilot is inside start after the start time.
                             
             #pilot must have at least 1 fix outside the start after the start time then enter            
-            if self.turnpoints[t].kind == "start_enter":  
+            elif self.turnpoints[t].kind == "start_enter":  
                 if proceed_to_start:
                     if self.turnpoints[t].in_radius(fix):
                         reached_turnpoints.append(fix)  #pilot has started
@@ -223,11 +220,12 @@ class Task:
                     if not self.turnpoints[t].in_radius(fix):
                         proceed_to_start = True         #pilot is outside start after the start time.    
             
-            if self.turnpoints[t].kind in ["cylinder", "End_of_speed_section", "goal_cylinder"]:
+            elif self.turnpoints[t].kind in ["cylinder", "End_of_speed_section", "goal_cylinder"]:
                 if self.turnpoints[t].in_radius(fix):
                     reached_turnpoints.append(fix)  #pilot has achieved turnpoint
                     t += 1
-
+            else:
+                assert False, "Unknown turnpoint kind: %s" % kind
                 
         return reached_turnpoints       
         

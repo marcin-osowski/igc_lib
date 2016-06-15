@@ -3,7 +3,32 @@ import unittest
 
 import igc_lib
 
+class TestNapretTaskParsing(unittest.TestCase):
 
+    def setUp(self):
+        test_file = 'testfiles/napret.lkt'
+        self.task = igc_lib.Task.create_from_lkt_file(test_file)
+
+    def testTaskHasStartTime(self):
+        self.assertAlmostEqual(self.task.start_time, 12*3600)
+
+    def testTaskHasEndTime(self):
+        self.assertAlmostEqual(self.task.end_time, 23*3600 + 59*60 + 59)
+
+    def testTaskHasTurnpoints(self):
+        self.assertEqual(len(self.task.turnpoints), 11)
+        self.assertEqual(self.task.turnpoints[0].kind, "start_enter")
+         
+    def testTaskHasTurnpointsWithRadius(self):
+        self.assertGreaterEqual(all(map(lambda turnpoint: turnpoint.radius, self.task.turnpoints)), 0.2)
+        self.assertLessEqual(all(map(lambda turnpoint: turnpoint.radius, self.task.turnpoints)), 4)
+        
+    def testTaskHasTurnpointsWithLatitude(self):
+        self.assertEqual(all(map(lambda turnpoint: turnpoint.lat % 46, self.task.turnpoints)), 1)
+                
+    def testTaskHasTurnpointsWithLongitude(self):
+        self.assertEqual(all(map(lambda turnpoint: turnpoint.lon % 12, self.task.turnpoints)), 1)
+      
 class TestNapretFlightParsing(unittest.TestCase):
 
     def setUp(self):
