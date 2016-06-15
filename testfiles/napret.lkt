@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lk-task type="Race">
+	<options auto-advance="Auto">
+		<time-gate number="1" open-time="12:00" close-time="23:59" interval-time="2"/>
+		<rules>
+			<finish fai-height="false" min-height="0"/>
+			<start max-height="0" max-height-margin="0" max-speed="0" max-speed-margin="0" height-ref="AGL"/>
+		</rules>
+	</options>
+	<taskpoints>
+		<point idx="0" name="M19026" type="circle" radius="4000.000000" Exit="false"/>
+		<point idx="1" name="M19026" type="circle" radius="2500.000000" Exit="false"/>
+		<point idx="2" name="M20023" type="circle" radius="1000.000000" Exit="false"/>
+		<point idx="3" name="M13032" type="circle" radius="1500.000000" Exit="false"/>
+		<point idx="4" name="M30028" type="circle" radius="2500.000000" Exit="false"/>
+		<point idx="5" name="M11024" type="circle" radius="1500.000000" Exit="false"/>
+		<point idx="6" name="M30028" type="circle" radius="1500.000000" Exit="false"/>
+		<point idx="7" name="M11024" type="circle" radius="1000.000000" Exit="false"/>
+		<point idx="8" name="M29020" type="circle" radius="2000.000000" Exit="false"/>
+		<point idx="9" name="M08026" type="circle" radius="1000.000000" Exit="false"/>
+		<point idx="10" name="M08026" type="line" radius="200.000000"/>
+	</taskpoints>
+	<waypoints>
+		<point name="M08026" latitude="46.205767" longitude="12.818650" altitude="260.000000" flags="2" comment="MEDUNO LANDI" format="1"/>
+		<point name="M11024" latitude="46.208250" longitude="12.781533" altitude="240.000000" flags="2" comment="MARALDI BRID" format="1"/>
+		<point name="M13032" latitude="46.223917" longitude="12.755517" altitude="320.000000" flags="2" comment="NAVARONS VIL" format="1"/>
+		<point name="M29020" latitude="46.164200" longitude="12.816317" altitude="200.000000" flags="2" comment="COLLE BRIDGE" format="1"/>
+		<point name="M19026" latitude="46.191350" longitude="12.780050" altitude="260.000000" flags="2" comment="CAVASSO CEME" format="1"/>
+		<point name="M30028" latitude="46.194300" longitude="12.888583" altitude="280.000000" flags="2" comment="GHOST VILLAG" format="1"/>
+		<point name="M20023" latitude="46.197100" longitude="12.858083" altitude="230.000000" flags="2" comment="TRAVESIO FOO" format="1"/>
+	</waypoints>
+</lk-task>
+
