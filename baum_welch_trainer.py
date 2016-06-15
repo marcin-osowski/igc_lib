@@ -5,7 +5,6 @@ Learns parameters for the circling/not circling filter. Training data is
 loaded from a directory.
 """
 
-import math
 import os
 import sys
 from Bio.Alphabet import Alphabet

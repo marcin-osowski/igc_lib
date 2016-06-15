@@ -7,6 +7,7 @@ import tempfile
 import igc_lib
 import dumpers
 
+
 class TestNapretTaskParsing(unittest.TestCase):
 
     def setUp(self):
@@ -37,6 +38,7 @@ class TestNapretTaskParsing(unittest.TestCase):
         self.assertEqual(max(map(lambda turnpoint: int(turnpoint.lon / 12),
                                  self.task.turnpoints)), 1)
 
+
 class TestNapretFlightParsing(unittest.TestCase):
 
     def setUp(self):
@@ -61,7 +63,8 @@ class TestNapretFlightParsing(unittest.TestCase):
         # 2016-04-03 0:00 UTC
         self.assertAlmostEqual(self.flight.date_timestamp, 1459641600.0)
         self.assertEqual(self.flight.glider_type, 'test_glider')
-        self.assertEqual(self.flight.competition_class, 'test_competition_class')
+        self.assertEqual(self.flight.competition_class,
+                         'test_competition_class')
         self.assertFalse(hasattr(self.flight, 'fr_firmware_version'))
         self.assertFalse(hasattr(self.flight, 'fr_hardware_version'))
         self.assertFalse(hasattr(self.flight, 'fr_recorder_type'))
@@ -80,16 +83,20 @@ class TestNapretFlightParsing(unittest.TestCase):
         self.assertGreater(len(self.flight.glides), 0)
 
     def testSomeFixesAreInFlight(self):
-        self.assertTrue(any(map(lambda fix: fix.flying, self.flight.fixes)))
+        self.assertTrue(
+            any(map(lambda fix: fix.flying, self.flight.fixes)))
 
     def testSomeFixesAreNotInFlight(self):
-        self.assertTrue(any(map(lambda fix: not fix.flying, self.flight.fixes)))
+        self.assertTrue(
+            any(map(lambda fix: not fix.flying, self.flight.fixes)))
 
     def testSomeFixesAreInCircling(self):
-        self.assertTrue(any(map(lambda fix: fix.circling, self.flight.fixes)))
+        self.assertTrue(
+            any(map(lambda fix: fix.circling, self.flight.fixes)))
 
     def testSomeFixesAreNotInCircling(self):
-        self.assertTrue(any(map(lambda fix: not fix.circling, self.flight.fixes)))
+        self.assertTrue(
+            any(map(lambda fix: not fix.circling, self.flight.fixes)))
 
 
 class TestDumpers(unittest.TestCase):
@@ -123,12 +130,12 @@ class TestDumpers(unittest.TestCase):
         self.assertFileNotEmpty(tmp_kml_file)
 
     def testCsvDumpsNotEmpty(self):
-        tmp_csv_track_file = os.path.join(self.tmp_output_dir, 'flight.csv')
-        tmp_csv_thermals_file = os.path.join(self.tmp_output_dir, 'thermals.csv')
-        dumpers.dump_flight_to_csv(self.flight, tmp_csv_track_file,
-                                   tmp_csv_thermals_file)
-        self.assertFileNotEmpty(tmp_csv_track_file)
-        self.assertFileNotEmpty(tmp_csv_thermals_file)
+        tmp_csv_track = os.path.join(self.tmp_output_dir, 'flight.csv')
+        tmp_csv_thermals = os.path.join(self.tmp_output_dir, 'thermals.csv')
+        dumpers.dump_flight_to_csv(
+            self.flight, tmp_csv_track, tmp_csv_thermals)
+        self.assertFileNotEmpty(tmp_csv_track)
+        self.assertFileNotEmpty(tmp_csv_thermals)
 
 
 if __name__ == '__main__':

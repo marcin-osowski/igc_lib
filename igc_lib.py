@@ -41,8 +41,27 @@ def _sphere_distance(lat1, lon1, lat2, lon2):
     """
     dlon = lon2 - lon1
     dlat = lat2 - lat1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    a = (math.sin(dlat/2)**2 +
+         math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2)
     return 2.0 * math.asin(math.sqrt(a))
+
+
+def _earth_distance(lat1, lon1, lat2, lon2):
+    """Computes Earth distance between two points, in kilometers.
+
+    Input angles are in degrees, WGS-84.
+
+    Args:
+        lat1: A float, latitude of the first point.
+        lon1: A float, longitude of the first point.
+        lat2: A float, latitude of the second point.
+        lon2: A float, latitude of the second point.
+
+    Returns:
+        A float, the computed Earth distance, in kilometers.
+    """
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    return EARTH_RADIUS_KM * _sphere_distance(lat1, lon1, lat2, lon2)
 
 
 def _strip_non_printable_chars(string):
@@ -99,12 +118,15 @@ class Turnpoint:
 
     def in_radius(self, fix):
         """Checks whether the provided GNSSFix is within the radius"""
-        lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, fix.lat, fix.lon])
-        distance = EARTH_RADIUS_KM * _sphere_distance(lat1, lon1, lat2, lon2)
+        distance = _earth_distance(self.lat, self.lon, fix.lat, fix.lon)
         return distance < self.radius
 
+
 class Task:
-    """Stores a task definition and checks if a flight has achieved the turnpoints in the task.
+    """Stores a single flight task definition
+
+    Checks if a Flight has achieved the turnpoints in the Task.
+
     Attributes:
         turnpoints: A list of Turnpoint objects.
         start_time: Raw time (seconds past midnight). The time the race starts.
@@ -118,8 +140,8 @@ class Task:
     def create_from_lkt_file(filename):
         """ Creates Task from LK8000 task file, which is in xml format.
             LK8000 does not have End of Speed Section or task finish time.
-            For the goal, at the moment, Turnpoints can't handle goal cones or lines,
-            for this reason we default to goal_cylinder.
+            For the goal, at the moment, Turnpoints can't handle goal cones or
+            lines, for this reason we default to goal_cylinder.
         """
 
         # Open XML document using minidom parser
@@ -127,7 +149,8 @@ class Task:
         task = DOMTree.documentElement
 
         # Get the taskpoints, waypoints and time gate
-        taskpoints = task.getElementsByTagName("taskpoints")[0] #TODO: add code to handle if these tags are missing.
+        # TODO: add code to handle if these tags are missing.
+        taskpoints = task.getElementsByTagName("taskpoints")[0]
         waypoints = task.getElementsByTagName("waypoints")[0]
         gate = task.getElementsByTagName("time-gate")[0]
         tpoints = taskpoints.getElementsByTagName("point")
@@ -136,9 +159,9 @@ class Task:
 
         start_hours, start_minutes = start_time.split(':')
         start_time = int(start_hours) * 3600 + int(start_minutes) * 60
-        end_time = 23*3600 + 59*60 + 59  #default end_time of 23:59
+        end_time = 23*3600 + 59*60 + 59  # default end_time of 23:59:59
 
-        # create a dictionary of names and a list of longitudes and latitudes
+        # Create a dictionary of names and a list of longitudes and latitudes
         # as the waypoints co-ordinates are stored separate to turnpoint details
         coords = defaultdict(list)
 
@@ -149,30 +172,34 @@ class Task:
             coords[name].append(longitude)
             coords[name].append(latitude)
 
-
-        # create list of turnpoints
+        # Create list of turnpoints
         turnpoints = []
         for point in tpoints:
             lat = coords[point.getAttribute("name")][1]
             lon = coords[point.getAttribute("name")][0]
             radius = float(point.getAttribute("radius"))/1000
 
-            if point == tpoints[0]:  # if it is the 1st turnpoint then it is a start
+            if point == tpoints[0]:
+                # It is the first turnpoint, the start
                 if point.getAttribute("Exit") == "true":
                     kind = "start_exit"
                 else:
                     kind = "start_enter"
             else:
-                if point == tpoints[-1]:  # if it is the last turnpoint i.e. the goal
+                if point == tpoints[-1]:
+                    # It is the last turnpoint, i.e. the goal
                     if point.getAttribute("type") == "line":
-                        kind = "goal_cylinder"    # TODO(kuaka): change to 'line' once we can process it
+                        # TODO(kuaka): change to 'line' once we can process it
+                        kind = "goal_cylinder"
                     else:
                         kind = "goal_cylinder"
                 else:
-                    kind = "cylinder"  # All turnpoints other than the 1st and the last are "cylinders".
-                                       # In theory they could be "End_of_speed_section" but this is not supported by LK8000.
-                                       # For paragliders it would be safe to assume that the 2nd to last is always "End_of_speed_section"
-
+                    # All turnpoints other than the 1st and the last are
+                    # "cylinders". In theory they could be
+                    # "End_of_speed_section" but this is not supported by
+                    # LK8000. For paragliders it would be safe to assume
+                    # that the 2nd to last is always "End_of_speed_section".
+                    kind = "cylinder"
 
             turnpoint = Turnpoint(lat, lon, radius, kind)
             turnpoints.append(turnpoint)
@@ -193,7 +220,7 @@ class Task:
         """
         reached_turnpoints = []
         proceed_to_start = False
-        t=0
+        t = 0
         for fix in Flight.fixes:
             if t >= len(self.turnpoints):
                 break  # pilot has arrived in goal (last turnpoint) so we can stop.
@@ -210,17 +237,20 @@ class Task:
                         t += 1
                 if fix.rawtime > self.start_time and not proceed_to_start:
                     if self.turnpoints[t].in_radius(fix):
-                        proceed_to_start = True         # pilot is inside start after the start time.
+                        # Pilot is inside start after the start time.
+                        proceed_to_start = True
 
-            # pilot must have at least 1 fix outside the start after the start time then enter
+            # Pilot must have at least 1 fix outside the start after the start time then enter
             elif self.turnpoints[t].kind == "start_enter":
                 if proceed_to_start:
                     if self.turnpoints[t].in_radius(fix):
-                        reached_turnpoints.append(fix)  # pilot has started
+                        # Pilot has started
+                        reached_turnpoints.append(fix)
                         t += 1
                 if fix.rawtime > self.start_time and not proceed_to_start:
                     if not self.turnpoints[t].in_radius(fix):
-                        proceed_to_start = True         # pilot is outside start after the start time.
+                        # Pilot is outside start after the start time.
+                        proceed_to_start = True
 
             elif self.turnpoints[t].kind in ["cylinder", "End_of_speed_section", "goal_cylinder"]:
                 if self.turnpoints[t].in_radius(fix):
@@ -230,6 +260,7 @@ class Task:
                 assert False, "Unknown turnpoint kind: %s" % self.turnpoints[t].kind
 
         return reached_turnpoints
+
 
 class GNSSFix:
     """Stores single GNSS flight recorder fix (a B-record).
@@ -315,23 +346,23 @@ class GNSSFix:
         return self.__str__()
 
     def __str__(self):
-        return (("GNSSFix(rawtime=%02d:%02d:%02d, lat=%f, lon=%f, altitide=%.1f)") %
-                    (_rawtime_float_to_hms(self.rawtime)
-                     + (self.lat, self.lon, self.alt)))
+        return (
+            "GNSSFix(rawtime=%02d:%02d:%02d, lat=%f, lon=%f, altitide=%.1f)" %
+            (_rawtime_float_to_hms(self.rawtime) +
+             (self.lat, self.lon, self.alt)))
 
     def bearing_to(self, other):
         """Computes bearing in degrees to another GNSSFix."""
         lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, other.lat, other.lon])
         dLon = lon2 - lon1
         y = math.sin(dLon) * math.cos(lat2)
-        x = (math.cos(lat1) * math.sin(lat2)
-              - math.sin(lat1) * math.cos(lat2) * math.cos(dLon))
+        x = (math.cos(lat1) * math.sin(lat2) -
+             math.sin(lat1) * math.cos(lat2) * math.cos(dLon))
         return math.degrees(math.atan2(y, x))
 
     def distance_to(self, other):
         """Computes great circle distance in kilometers to another GNSSFix."""
-        lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, other.lat, other.lon])
-        return EARTH_RADIUS_KM * _sphere_distance(lat1, lon1, lat2, lon2)
+        return _earth_distance(self.lat, self.lon, other.lat, other.lon)
 
     def to_B_record(self):
         """Reconstructs an IGC B-record."""
@@ -367,13 +398,14 @@ class GNSSFix:
         gnss_alt = int(self.gnss_alt)
         extras = self.extras
 
-        return (("B")
-                  + ("%02d%02d%02d" % (hours, minutes, seconds))
-                  + ("%02d%02d%03d%s" % (lat_deg, lat_min, lat_min_dec, lat_sign))
-                  + ("%03d%02d%03d%s" % (lon_deg, lon_min, lon_min_dec, lon_sign))
-                  + (validity)
-                  + ("%05d%05d" % (press_alt, gnss_alt))
-                  + (extras))
+        return (
+            "B" +
+            "%02d%02d%02d" % (hours, minutes, seconds) +
+            "%02d%02d%03d%s" % (lat_deg, lat_min, lat_min_dec, lat_sign) +
+            "%03d%02d%03d%s" % (lon_deg, lon_min, lon_min_dec, lon_sign) +
+            validity +
+            "%05d%05d" % (press_alt, gnss_alt) +
+            extras)
 
 
 class Thermal:
@@ -602,7 +634,8 @@ class Flight:
                 elif line[0] == 'H':
                     h_records.append(line)
                 else:
-                    pass # Do not parse any other types of IGC records
+                    # Do not parse any other types of IGC records
+                    pass
         flight = Flight(fixes, a_records, h_records, i_records, config)
         return flight
 
@@ -701,28 +734,33 @@ class Flight:
                 'HFGTY[ ]*GLIDER[ ]*TYPE[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.glider_type,) = map(_strip_non_printable_chars, match.groups())
+                (self.glider_type,) = map(
+                    _strip_non_printable_chars, match.groups())
         elif record[0:5] == 'HFRFW' or record[0:5] == 'HFRHW':
             match = re.match(
                 'HFR[FH]W[ ]*FIRMWARE[ ]*VERSION[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.fr_firmware_version,) = map(_strip_non_printable_chars, match.groups())
+                (self.fr_firmware_version,) = map(
+                    _strip_non_printable_chars, match.groups())
             match = re.match(
                 'HFR[FH]W[ ]*HARDWARE[ ]*VERSION[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.fr_hardware_version,) = map(_strip_non_printable_chars, match.groups())
+                (self.fr_hardware_version,) = map(
+                    _strip_non_printable_chars, match.groups())
         elif record[0:5] == 'HFFTY':
             match = re.match(
                 'HFFTY[ ]*FR[ ]*TYPE[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.fr_recorder_type,) = map(_strip_non_printable_chars, match.groups())
+                (self.fr_recorder_type,) = map(
+                    _strip_non_printable_chars, match.groups())
         elif record[0:5] == 'HFGPS':
             match = re.match('HFGPS(?:[: ]|(?:GPS))*(.*)', record, flags=re.IGNORECASE)
             if match:
-                (self.fr_gps_receiver,) = map(_strip_non_printable_chars, match.groups())
+                (self.fr_gps_receiver,) = map(
+                    _strip_non_printable_chars, match.groups())
         elif record[0:5] == 'HFPRS':
             match = re.match(
                 'HFPRS[ ]*PRESS[ ]*ALT[ ]*SENSOR[ ]*:[ ]*(.*)',
@@ -744,16 +782,19 @@ class Flight:
         return descr
 
     def _check_altitudes(self):
-        press_alt_violations_num = 0;
-        gnss_alt_violations_num = 0;
-        press_huge_changes_num = 0;
-        gnss_huge_changes_num = 0;
+        press_alt_violations_num = 0
+        gnss_alt_violations_num = 0
+        press_huge_changes_num = 0
+        gnss_huge_changes_num = 0
         press_chgs_sum = 0.0
         gnss_chgs_sum = 0.0
         for i in xrange(len(self.fixes) - 1):
-            press_alt_delta = math.fabs(self.fixes[i+1].press_alt - self.fixes[i].press_alt)
-            gnss_alt_delta = math.fabs(self.fixes[i+1].gnss_alt - self.fixes[i].gnss_alt)
-            rawtime_delta = math.fabs(self.fixes[i+1].rawtime - self.fixes[i].rawtime)
+            press_alt_delta = math.fabs(
+                self.fixes[i+1].press_alt - self.fixes[i].press_alt)
+            gnss_alt_delta = math.fabs(
+                self.fixes[i+1].gnss_alt - self.fixes[i].gnss_alt)
+            rawtime_delta = math.fabs(
+                self.fixes[i+1].rawtime - self.fixes[i].rawtime)
             if rawtime_delta > 0.5:
                 if press_alt_delta / rawtime_delta > self.config.max_alt_change_rate():
                     press_huge_changes_num += 1
@@ -766,8 +807,8 @@ class Flight:
             if (self.fixes[i].press_alt > self.config.max_alt()
                 or self.fixes[i].press_alt < self.config.min_alt()):
                 press_alt_violations_num += 1
-            if (self.fixes[i].gnss_alt > self.config.max_alt()
-                or self.fixes[i].gnss_alt < self.config.min_alt()):
+            if (self.fixes[i].gnss_alt > self.config.max_alt() or
+                self.fixes[i].gnss_alt < self.config.min_alt()):
                 gnss_alt_violations_num += 1
         press_chgs_avg = press_chgs_sum / float(len(self.fixes) - 1)
         gnss_chgs_avg = gnss_chgs_sum / float(len(self.fixes) - 1)
@@ -777,20 +818,20 @@ class Flight:
             self.notes.append(
                 "Warning: average pressure altitude change between fixes is: %f. "
                 "It is lower than the minimum: %f."
-                    % (press_chgs_avg, self.config.min_avg_abs_alt_change()))
+                % (press_chgs_avg, self.config.min_avg_abs_alt_change()))
             press_alt_ok = False
 
         if press_huge_changes_num > self.config.max_alt_change_violations():
             self.notes.append(
                 "Warning: too many high changes in pressure altitude: %d. "
                 "Maximum allowed: %d."
-                    % (press_huge_changes_num, self.config.max_alt_change_violations()))
+                % (press_huge_changes_num, self.config.max_alt_change_violations()))
             press_alt_ok = False
 
         if press_alt_violations_num > 0:
             self.notes.append(
                 "Warning: pressure altitude limits exceeded in %d fixes."
-                    % (press_alt_violations_num))
+                % (press_alt_violations_num))
             press_alt_ok = False
 
         gnss_alt_ok = True
@@ -798,25 +839,25 @@ class Flight:
             self.notes.append(
                 "Warning: average gnss altitude change between fixes is: %f. "
                 "It is lower than the minimum: %f."
-                    % (gnss_chgs_avg, self.config.min_avg_abs_alt_change()))
+                % (gnss_chgs_avg, self.config.min_avg_abs_alt_change()))
             gnss_alt_ok = False
 
         if gnss_huge_changes_num > self.config.max_alt_change_violations():
             self.notes.append(
                 "Warning: too many high changes in gnss altitude: %d. "
                 "Maximum allowed: %d."
-                    % (gnss_huge_changes_num, self.config.max_alt_change_violations()))
+                % (gnss_huge_changes_num,
+                   self.config.max_alt_change_violations()))
             gnss_alt_ok = False
 
         if gnss_alt_violations_num > 0:
             self.notes.append(
-                "Warning: gnss altitude limits exceeded in %d fixes."
-                    % (gnss_alt_violations_num))
+                "Warning: gnss altitude limits exceeded in %d fixes." %
+                gnss_alt_violations_num)
             gnss_alt_ok = False
 
         self.press_alt_valid = press_alt_ok
         self.gnss_alt_valid = gnss_alt_ok
-
 
     def _check_fix_rawtime(self):
         """Checks for rawtime anomalies, fixes 0:00 UTC crossing.
@@ -833,7 +874,8 @@ class Flight:
             f0 = self.fixes[i-1]
             f1 = self.fixes[i]
 
-            if f0.rawtime > f1.rawtime and f1.rawtime + DAY < f0.rawtime + 200.0:
+            if (f0.rawtime > f1.rawtime and
+                f1.rawtime + DAY < f0.rawtime + 200.0):
                 # Day switch
                 days_added += 1
                 rawtime_to_add += DAY
@@ -849,14 +891,14 @@ class Flight:
             self.notes.append(
                 "Error: too many fixes intervals exceed time between fixes "
                 "constraints. Allowed %d fixes, found %d fixes."
-                    % (self.config.max_time_violations(),
-                       rawtime_between_fix_exceeded))
+                % (self.config.max_time_violations(),
+                   rawtime_between_fix_exceeded))
             self.valid = False
         if days_added > self.config.max_new_days_in_flight():
             self.notes.append(
                 "Error: too many times did the flight cross the UTC 0:00 "
                 "barrier. Allowed %d times, found %d times."
-                    % (self.config.max_new_days_in_flight(), days_added))
+                % (self.config.max_new_days_in_flight(), days_added))
             self.valid = False
 
     def _compute_ground_speeds(self):
@@ -917,11 +959,11 @@ class Flight:
         min_time_for_bearing_change seconds apart.
         """
         def find_prev_fix(curr_fix):
-            """Computes the previous fix to be used in bearing rate change calculation."""
+            """Computes the previous fix to be used in bearing rate change."""
             prev_fix = None
             for i in xrange(curr_fix - 1, 0, -1):
-                time_dist = math.fabs(self.fixes[curr_fix].timestamp
-                    - self.fixes[i].timestamp)
+                time_dist = math.fabs(self.fixes[curr_fix].timestamp -
+                                      self.fixes[i].timestamp)
                 if time_dist + 1e-7 > self.config.min_time_for_bearing_change():
                     prev_fix = i
                     break
@@ -933,13 +975,15 @@ class Flight:
             if prev_fix is None:
                 self.fixes[curr_fix].bearing_change_rate = 0.0
             else:
-                bearing_change = self.fixes[prev_fix].bearing - self.fixes[curr_fix].bearing
+                bearing_change = (self.fixes[prev_fix].bearing -
+                                  self.fixes[curr_fix].bearing)
                 if math.fabs(bearing_change) > 180.0:
                     if bearing_change < 0.0:
                         bearing_change += 360.0
                     else:
                         bearing_change -= 360.0
-                time_change = self.fixes[prev_fix].timestamp - self.fixes[curr_fix].timestamp
+                time_change = (self.fixes[prev_fix].timestamp -
+                               self.fixes[curr_fix].timestamp)
                 self.fixes[curr_fix].bearing_change_rate = bearing_change/time_change
 
     def _circling_emissions(self):
@@ -1010,7 +1054,8 @@ class Flight:
                 if thermal.time_change() > self.config.min_time_for_thermal() - 1e-5:
                     self.thermals.append(thermal)
                     # glide ends at start of thermal
-                    glide = Glide(first_glide_fix, first_fix, distance_start_circling)
+                    glide = Glide(first_glide_fix, first_fix,
+                                  distance_start_circling)
                     self.glides.append(glide)
                     gliding_now = False
 
