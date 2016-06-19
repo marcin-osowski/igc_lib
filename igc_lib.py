@@ -17,10 +17,10 @@ import collections
 import datetime
 import math
 import re
-from Bio.Alphabet import Alphabet
-from Bio.HMM.MarkovModel import MarkovModelBuilder
 import xml.dom.minidom
 from collections import defaultdict
+
+import viterbi
 
 EARTH_RADIUS_KM = 6371.0
 
@@ -914,35 +914,30 @@ class Flight:
 
     def _compute_flight(self):
         """Adds boolean flag .flying to self.fixes."""
-        flight_list = []
+
+        # Encode standing (not flying) as 0, flying as 1.
+        emissions = []
         for fix in self.fixes:
             if fix.gsp > self.config.min_gsp_flight():
-                flight_list.append("F")
+                emissions.append(1)
             else:
-                flight_list.append("S")
+                emissions.append(0)
 
-        state_alphabet = Alphabet()
-        state_alphabet.letters = list("fs")
-        emissions_alphabet = Alphabet()
-        emissions_alphabet.letters = list("FS")
+        decoder = viterbi.SimpleViterbiDecoder(
+            init_probs=[0.5, 0.5],
+            transition_probs=[
+                [0.9999, 0.0001],  # transitions from standing
+                [0.0001, 0.9999],  # transitions from flying
+            ],
+            emission_probs=[
+                [0.99, 0.01],  # emissions from standing
+                [0.05, 0.95],  # emissions from flying
+            ])
 
-        mmb = MarkovModelBuilder(state_alphabet, emissions_alphabet)
-        mmb.set_initial_probabilities({'s': 0.5963, 'f': 0.4037})
-        mmb.allow_all_transitions()
-        mmb.set_transition_score('s', 's', 0.9999)
-        mmb.set_transition_score('s', 'f', 0.0001)
-        mmb.set_transition_score('f', 's', 0.0001)
-        mmb.set_transition_score('f', 'f', 0.9999)
-        mmb.set_emission_score('s', 'F', 0.0010)
-        mmb.set_emission_score('s', 'S', 0.9990)
-        mmb.set_emission_score('f', 'F', 0.9500)
-        mmb.set_emission_score('f', 'S', 0.0500)
-        mm = mmb.get_markov_model()
-
-        (output, score) = mm.viterbi(flight_list, state_alphabet)
+        output = decoder.decode(emissions)
 
         for fix, output in zip(self.fixes, output):
-            fix.flying = (output == 'f')
+            fix.flying = (output == 1)
 
     def _compute_bearings(self):
         """Adds bearing info to self.fixes."""
@@ -987,44 +982,41 @@ class Flight:
                 self.fixes[curr_fix].bearing_change_rate = bearing_change/time_change
 
     def _circling_emissions(self):
-        """Generates raw circling/straight emissions from bearing change."""
-        emissions_list = []
+        """Generates raw circling/straight emissions from bearing change.
+
+        Staight flight is encoded as 0, circling is encoded as 1. Exported
+        to a separate function to be used in Baum-Welch parameters learning.
+        """
+        emissions = []
         for fix in self.fixes:
             bearing_change = math.fabs(fix.bearing_change_rate)
             bearing_change_enough = (
                 bearing_change > self.config.min_bearing_change_circling())
             if fix.flying and bearing_change_enough:
-                emissions_list.append('C')
+                emissions.append(1)
             else:
-                emissions_list.append('S')
-        return ''.join(emissions_list)
+                emissions.append(0)
+        return emissions
 
     def _compute_circling(self):
         """Adds .circling to self.fixes."""
         emissions = self._circling_emissions()
+        decoder = viterbi.SimpleViterbiDecoder(
+            # More likely to start in straight flight than in circling
+            init_probs=[0.95, 0.05],
+            transition_probs=[
+                [0.983, 0.017],  # transitions from straight flight
+                [0.030, 0.970],  # transitions from circling
+            ],
+            emission_probs=[
+                [0.939, 0.061],  # emissions from straight flight
+                [0.098, 0.902],  # emissions from circling
+            ])
 
-        state_alphabet = Alphabet()
-        state_alphabet.letters = list("cs")
-        emissions_alphabet = Alphabet()
-        emissions_alphabet.letters = list("CS")
-
-        mmb = MarkovModelBuilder(state_alphabet, emissions_alphabet)
-        mmb.set_initial_probabilities({'c': 0.05, 's': 0.95})
-        mmb.allow_all_transitions()
-        mmb.set_transition_score('c', 'c', 0.970)
-        mmb.set_transition_score('c', 's', 0.030)
-        mmb.set_transition_score('s', 'c', 0.017)
-        mmb.set_transition_score('s', 's', 0.983)
-        mmb.set_emission_score('c', 'C', 0.902)
-        mmb.set_emission_score('c', 'S', 0.098)
-        mmb.set_emission_score('s', 'C', 0.061)
-        mmb.set_emission_score('s', 'S', 0.939)
-        mm = mmb.get_markov_model()
-
-        (output, score) = mm.viterbi(emissions, state_alphabet)
+        output = decoder.decode(emissions)
 
         for i in xrange(len(self.fixes)):
-            self.fixes[i].circling = (output[i] == 'c')
+            self.fixes[i].circling = (output[i] == 1)
 
     def _find_thermals(self):
         """Go through the fixes and find the thermals.

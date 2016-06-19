@@ -1,4 +1,9 @@
 #!/bin/bash
 set -e
 
-/usr/bin/env python -m unittest discover
+if [ -z "$1" ]; then
+    # No argument provided - run all tests
+    /usr/bin/env python -m unittest discover
+else
+    /usr/bin/env python -m unittest $1
+fi

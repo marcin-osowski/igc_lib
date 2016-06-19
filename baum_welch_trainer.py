@@ -52,8 +52,13 @@ def get_flight_training_sequence(flight):
     emissions_alphabet = Alphabet()
     emissions_alphabet.letters = list("CS")
 
-    emissions = flight._circling_emissions()
-    emissions = Seq(emissions, emissions_alphabet)
+    emissions = []
+    for x in flight._circling_emissions():
+        if x == 1:
+            emissions.append("C")
+        else:
+            emissions.append("S")
+    emissions = Seq("".join(emissions), emissions_alphabet)
     empty_states = Seq("", state_alphabet)
     return TrainingSequence(emissions, empty_states)
 
