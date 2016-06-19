@@ -94,18 +94,14 @@ def _rawtime_float_to_hms(timef):
 
 
 class Turnpoint:
-    """ single turnpoint in a task.
+    """A single turnpoint in a Task.
+
     Attributes:
         lat: a float, latitude in degrees
         lon: a float, longitude in degrees
-        radius: radius of cylinder or line in km
-        kind: type of turnpoint; "start_exit",
-                                 "start_enter",
-                                 "cylinder",
-                                 "End_of_speed_section",
-                                 "goal_cylinder",
-                                 "goal_line"
-
+        radius: a float, radius of cylinder or line in km
+        kind: type of turnpoint; "start_exit", "start_enter", "cylinder",
+        "End_of_speed_section", "goal_cylinder", "goal_line"
     """
 
     def __init__(self, lat, lon, radius, kind):
@@ -113,7 +109,9 @@ class Turnpoint:
         self.lon = lon
         self.radius = radius
         self.kind = kind
-        assert kind in ["start_exit", "start_enter", "cylinder", "End_of_speed_section", "goal_cylinder", "goal_line"], \
+        assert kind in ["start_exit", "start_enter", "cylinder",
+                        "End_of_speed_section", "goal_cylinder",
+                        "goal_line"], \
             "turnpoint type is not valid: %r" % kind
 
     def in_radius(self, fix):
@@ -162,7 +160,8 @@ class Task:
         end_time = 23*3600 + 59*60 + 59  # default end_time of 23:59:59
 
         # Create a dictionary of names and a list of longitudes and latitudes
-        # as the waypoints co-ordinates are stored separate to turnpoint details
+        # as the waypoints co-ordinates are stored separate to turnpoint
+        # details.
         coords = defaultdict(list)
 
         for point in wpoints:
