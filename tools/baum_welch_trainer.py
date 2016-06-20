@@ -13,6 +13,8 @@ from Bio.HMM.Trainer import BaumWelchTrainer
 from Bio.HMM.Trainer import TrainingSequence
 from Bio.Seq import Seq
 
+# A hack to import from the parent directory
+sys.path.insert(0, '..')
 import igc_lib
 
 

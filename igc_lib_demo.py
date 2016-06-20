@@ -3,7 +3,7 @@ import os
 import sys
 
 import igc_lib
-import dumpers
+import lib.dumpers
 
 
 if __name__ == "__main__":
@@ -31,12 +31,12 @@ if __name__ == "__main__":
 
     print "Dumping thermals to %s, %s and %s" % (
         wpt_file, cup_file, thermals_csv_file)
-    dumpers.dump_thermals_to_wpt_file(flight, wpt_file, True)
-    dumpers.dump_thermals_to_cup_file(flight, cup_file)
+    lib.dumpers.dump_thermals_to_wpt_file(flight, wpt_file, True)
+    lib.dumpers.dump_thermals_to_cup_file(flight, cup_file)
 
     print "Dumping flight to %s and %s" % (kml_file, flight_csv_file)
-    dumpers.dump_flight_to_csv(flight, flight_csv_file, thermals_csv_file)
-    dumpers.dump_flight_to_kml(flight, kml_file)
+    lib.dumpers.dump_flight_to_csv(flight, flight_csv_file, thermals_csv_file)
+    lib.dumpers.dump_flight_to_kml(flight, kml_file)
 
     if len(sys.argv) > 2:
         task = igc_lib.Task.create_from_lkt_file(task_file)
