@@ -20,7 +20,7 @@ import re
 import xml.dom.minidom
 from collections import defaultdict
 
-import viterbi
+import lib.viterbi
 
 EARTH_RADIUS_KM = 6371.0
 
@@ -930,7 +930,7 @@ class Flight:
     def _compute_flight(self):
         """Adds boolean flag .flying to self.fixes."""
         emissions = self._flying_emissions()
-        decoder = viterbi.SimpleViterbiDecoder(
+        decoder = lib.viterbi.SimpleViterbiDecoder(
             # More likely to start the log standing, i.e. not in flight
             init_probs=[0.80, 0.20],
             transition_probs=[
@@ -1009,7 +1009,7 @@ class Flight:
     def _compute_circling(self):
         """Adds .circling to self.fixes."""
         emissions = self._circling_emissions()
-        decoder = viterbi.SimpleViterbiDecoder(
+        decoder = lib.viterbi.SimpleViterbiDecoder(
             # More likely to start in straight flight than in circling
             init_probs=[0.80, 0.20],
             transition_probs=[
