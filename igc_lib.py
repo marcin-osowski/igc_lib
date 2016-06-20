@@ -911,10 +911,13 @@ class Flight:
             else:
                 self.fixes[i].gsp = dist/rawtime*3600.0
 
-    def _compute_flight(self):
-        """Adds boolean flag .flying to self.fixes."""
+    def _flying_emissions(self):
+        """Generates raw flying/not flying emissions from ground speed.
 
-        # Encode standing (not flying) as 0, flying as 1.
+        Standing (i.e. not flying) is encoded as 0, flying is encoded as 1.
+        Exported to a separate function to be used in Baum-Welch parameters
+        learning.
+        """
         emissions = []
         for fix in self.fixes:
             if fix.gsp > self.config.min_gsp_flight():
@@ -922,15 +925,21 @@ class Flight:
             else:
                 emissions.append(0)
 
+        return emissions
+
+    def _compute_flight(self):
+        """Adds boolean flag .flying to self.fixes."""
+        emissions = self._flying_emissions()
         decoder = viterbi.SimpleViterbiDecoder(
-            init_probs=[0.5, 0.5],
+            # More likely to start the log standing, i.e. not in flight
+            init_probs=[0.80, 0.20],
             transition_probs=[
-                [0.9999, 0.0001],  # transitions from standing
-                [0.0001, 0.9999],  # transitions from flying
+                [0.9926, 0.0074],  # transitions from standing
+                [0.0003, 0.9997],  # transitions from flying
             ],
             emission_probs=[
-                [0.99, 0.01],  # emissions from standing
-                [0.05, 0.95],  # emissions from flying
+                [0.974, 0.026],  # emissions from standing
+                [0.031, 0.969],  # emissions from flying
             ])
 
         output = decoder.decode(emissions)
@@ -1002,14 +1011,14 @@ class Flight:
         emissions = self._circling_emissions()
         decoder = viterbi.SimpleViterbiDecoder(
             # More likely to start in straight flight than in circling
-            init_probs=[0.95, 0.05],
+            init_probs=[0.80, 0.20],
             transition_probs=[
-                [0.983, 0.017],  # transitions from straight flight
+                [0.982, 0.018],  # transitions from straight flight
                 [0.030, 0.970],  # transitions from circling
             ],
             emission_probs=[
-                [0.939, 0.061],  # emissions from straight flight
-                [0.098, 0.902],  # emissions from circling
+                [0.942, 0.058],  # emissions from straight flight
+                [0.093, 0.907],  # emissions from circling
             ])
 
         output = decoder.decode(emissions)
