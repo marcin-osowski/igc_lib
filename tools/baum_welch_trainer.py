@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """A tool to learn Viterbi filter (Markov model) parameters from IGC files.
 
-Learns parameters for the circling/not circling filter. Training data is
-loaded from a directory.
+Learns parameters for the circling/not circling filter and for
+the flying/not flying filter. Training data is loaded from
+a directory.
 """
 
 import os
