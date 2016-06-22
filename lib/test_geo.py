@@ -5,7 +5,7 @@ import geo
 
 
 class TestSphereDistance(unittest.TestCase):
-    
+
     def testAlongTheEquator(self):
         for lon_start in [0.0, 10.0, 20.0, 35.0]:
             for lon_end in [0.0, 5.0, 10.0, 45.0, 90.0, 180.0]:
