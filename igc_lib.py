@@ -21,47 +21,7 @@ import xml.dom.minidom
 from collections import defaultdict
 
 import lib.viterbi
-
-EARTH_RADIUS_KM = 6371.0
-
-
-def _sphere_distance(lat1, lon1, lat2, lon2):
-    """Computes the great circle distance on a unit sphere.
-
-    All angles and the return value are in radians.
-
-    Args:
-        lat1: A float, latitude of the first point.
-        lon1: A float, longitude of the first point.
-        lat2: A float, latitude of the second point.
-        lon2: A float, latitude of the second point.
-
-    Returns:
-        The computed great circle distance on a sphere.
-    """
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = (math.sin(dlat/2)**2 +
-         math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2)
-    return 2.0 * math.asin(math.sqrt(a))
-
-
-def _earth_distance(lat1, lon1, lat2, lon2):
-    """Computes Earth distance between two points, in kilometers.
-
-    Input angles are in degrees, WGS-84.
-
-    Args:
-        lat1: A float, latitude of the first point.
-        lon1: A float, longitude of the first point.
-        lat2: A float, latitude of the second point.
-        lon2: A float, latitude of the second point.
-
-    Returns:
-        A float, the computed Earth distance, in kilometers.
-    """
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    return EARTH_RADIUS_KM * _sphere_distance(lat1, lon1, lat2, lon2)
+import lib.geo
 
 
 def _strip_non_printable_chars(string):
@@ -116,7 +76,7 @@ class Turnpoint:
 
     def in_radius(self, fix):
         """Checks whether the provided GNSSFix is within the radius"""
-        distance = _earth_distance(self.lat, self.lon, fix.lat, fix.lon)
+        distance = lib.geo.earth_distance(self.lat, self.lon, fix.lat, fix.lon)
         return distance < self.radius
 
 
@@ -352,16 +312,11 @@ class GNSSFix:
 
     def bearing_to(self, other):
         """Computes bearing in degrees to another GNSSFix."""
-        lat1, lon1, lat2, lon2 = map(math.radians, [self.lat, self.lon, other.lat, other.lon])
-        dLon = lon2 - lon1
-        y = math.sin(dLon) * math.cos(lat2)
-        x = (math.cos(lat1) * math.sin(lat2) -
-             math.sin(lat1) * math.cos(lat2) * math.cos(dLon))
-        return math.degrees(math.atan2(y, x))
+        return lib.geo.bearing_to(self.lat, self.lon, other.lat, other.lon)
 
     def distance_to(self, other):
         """Computes great circle distance in kilometers to another GNSSFix."""
-        return _earth_distance(self.lat, self.lon, other.lat, other.lon)
+        return lib.geo.earth_distance(self.lat, self.lon, other.lat, other.lon)
 
     def to_B_record(self):
         """Reconstructs an IGC B-record."""
