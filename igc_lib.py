@@ -182,13 +182,15 @@ class Task:
         t = 0
         for fix in Flight.fixes:
             if t >= len(self.turnpoints):
-                break  # pilot has arrived in goal (last turnpoint) so we can stop.
+                # Pilot has arrived in goal (last turnpoint) so we can stop.
+                break
 
             if self.end_time < fix.rawtime:
                 # Task has ended
                 break
 
-            # pilot must have at least 1 fix inside the start after the start time then exit
+            # Pilot must have at least 1 fix inside the start after the start
+            # time, then exit.
             if self.turnpoints[t].kind == "start_exit":
                 if proceed_to_start:
                     if not self.turnpoints[t].in_radius(fix):
@@ -199,7 +201,8 @@ class Task:
                         # Pilot is inside start after the start time.
                         proceed_to_start = True
 
-            # Pilot must have at least 1 fix outside the start after the start time then enter
+            # Pilot must have at least 1 fix outside the start after
+            # the start time, then enter.
             elif self.turnpoints[t].kind == "start_enter":
                 if proceed_to_start:
                     if self.turnpoints[t].in_radius(fix):
@@ -211,12 +214,16 @@ class Task:
                         # Pilot is outside start after the start time.
                         proceed_to_start = True
 
-            elif self.turnpoints[t].kind in ["cylinder", "End_of_speed_section", "goal_cylinder"]:
+            elif self.turnpoints[t].kind in ["cylinder",
+                                             "End_of_speed_section",
+                                             "goal_cylinder"]:
                 if self.turnpoints[t].in_radius(fix):
-                    reached_turnpoints.append(fix)  # pilot has achieved turnpoint
+                    # pilot has achieved turnpoint
+                    reached_turnpoints.append(fix)
                     t += 1
             else:
-                assert False, "Unknown turnpoint kind: %s" % self.turnpoints[t].kind
+                assert False, (
+                    "Unknown turnpoint kind: %s" % self.turnpoints[t].kind)
 
         return reached_turnpoints
 
@@ -253,33 +260,42 @@ class GNSSFix:
         Returns:
             The created GNSSFix object
         """
-        match = re.match('^B' + '(\d\d)(\d\d)(\d\d)' + '(\d\d)(\d\d)(\d\d\d)([NS])'
-                              + '(\d\d\d)(\d\d)(\d\d\d)([EW])' + '([AV])'
-                              + '([-\d]\d\d\d\d)' + '([-\d]\d\d\d\d)'
-                              + '([0-9a-zA-Z]*).*$', B_record_line)
+        match = re.match(
+            '^B' + '(\d\d)(\d\d)(\d\d)'
+            + '(\d\d)(\d\d)(\d\d\d)([NS])'
+            + '(\d\d\d)(\d\d)(\d\d\d)([EW])'
+            + '([AV])' + '([-\d]\d\d\d\d)' + '([-\d]\d\d\d\d)'
+            + '([0-9a-zA-Z]*).*$', B_record_line)
         if match is None:
             return None
         (hours, minutes, seconds,
          lat_deg, lat_min, lat_min_dec, lat_sign,
          lon_deg, lon_min, lon_min_dec, lon_sign,
-         validity, press_alt, gnss_alt, extras) = match.groups()
+         validity, press_alt, gnss_alt,
+         extras) = match.groups()
 
         rawtime = (float(hours)*60.0 + float(minutes))*60.0 + float(seconds)
 
-        lat = float(lat_deg) + (float(lat_min) + float(lat_min_dec)/1000.0)/60.0
+        lat = float(lat_deg)
+        lat += float(lat_min) / 60.0
+        lat += float(lat_min_dec) / 1000.0 / 60.0
         if lat_sign == 'S':
             lat = -lat
 
-        lon = float(lon_deg) + (float(lon_min) + float(lon_min_dec)/1000.0)/60.0
+        lon = float(lon_deg)
+        lon += float(lon_min) / 60.0
+        lon += float(lon_min_dec) / 1000.0 / 60.0
         if lon_sign == 'W':
             lon = -lon
 
         press_alt = float(press_alt)
         gnss_alt = float(gnss_alt)
 
-        return GNSSFix(rawtime, lat, lon, validity, press_alt, gnss_alt, extras)
+        return GNSSFix(rawtime, lat, lon, validity, press_alt, gnss_alt,
+                       extras)
 
-    def __init__(self, rawtime, lat, lon, validity, press_alt, gnss_alt, extras):
+    def __init__(self, rawtime, lat, lon, validity, press_alt, gnss_alt,
+                 extras):
         """Initializer of GNSSFix. Not meant to be used directly."""
         self.rawtime = rawtime
         self.lat = lat
@@ -437,8 +453,11 @@ class Glide:
 
     def __str__(self):
         hms = _rawtime_float_to_hms(self.time_change())
-        return ("Glide(dist=%.2f km, avg_speed=%.2f kph, avg L/D=%.2f duration=%dm %ds)" %
-                (self.track_length, self.speed(), self.glide_ratio(), hms.minutes, hms.seconds))
+        return (
+            ("Glide(dist=%.2f km, avg_speed=%.2f kph, "
+             "avg L/D=%.2f duration=%dm %ds)") % (
+                self.track_length, self.speed(), self.glide_ratio(),
+                hms.minutes, hms.seconds))
 
 
 class FlightParsingConfig(object):
@@ -490,7 +509,7 @@ class FlightParsingConfig(object):
         return 50.0
 
     def max_alt_change_violations(self):
-        """Maximum number of fixes that can exceed the altitude change limit."""
+        """Maximum number of fixes that exceed the altitude change limit."""
         return 3
 
     def max_alt(self):
@@ -618,7 +637,8 @@ class Flight:
         elif self.gnss_alt_valid:
             self.alt_source = "GNSS"
         else:
-            self.notes.append("Error: neither pressure nor gnss altitude is valid.")
+            self.notes.append(
+                "Error: neither pressure nor gnss altitude is valid.")
             self.valid = False
             return
 
@@ -673,7 +693,9 @@ class Flight:
 
     def _parse_h_record(self, record):
         if record[0:5] == 'HFDTE':
-            match = re.match('HFDTE(\d\d)(\d\d)(\d\d)', record, flags=re.IGNORECASE)
+            match = re.match(
+                'HFDTE(\d\d)(\d\d)(\d\d)',
+                record, flags=re.IGNORECASE)
             if match:
                 dd, mm, yy = map(_strip_non_printable_chars, match.groups())
                 year = int("20%s" % yy)
@@ -708,28 +730,33 @@ class Flight:
                 'HFFTY[ ]*FR[ ]*TYPE[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.fr_recorder_type,) = map(
-                    _strip_non_printable_chars, match.groups())
+                (self.fr_recorder_type,) = map(_strip_non_printable_chars,
+                                               match.groups())
         elif record[0:5] == 'HFGPS':
-            match = re.match('HFGPS(?:[: ]|(?:GPS))*(.*)', record, flags=re.IGNORECASE)
+            match = re.match(
+                'HFGPS(?:[: ]|(?:GPS))*(.*)',
+                record, flags=re.IGNORECASE)
             if match:
-                (self.fr_gps_receiver,) = map(
-                    _strip_non_printable_chars, match.groups())
+                (self.fr_gps_receiver,) = map(_strip_non_printable_chars,
+                                              match.groups())
         elif record[0:5] == 'HFPRS':
             match = re.match(
                 'HFPRS[ ]*PRESS[ ]*ALT[ ]*SENSOR[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.fr_pressure_sensor,) = map(_strip_non_printable_chars, match.groups())
+                (self.fr_pressure_sensor,) = map(_strip_non_printable_chars,
+                                                 match.groups())
         elif record[0:5] == 'HFCCL':
             match = re.match(
                 'HFCCL[ ]*COMPETITION[ ]*CLASS[ ]*:[ ]*(.*)',
                 record, flags=re.IGNORECASE)
             if match:
-                (self.competition_class,) = map(_strip_non_printable_chars, match.groups())
+                (self.competition_class,) = map(_strip_non_printable_chars,
+                                                match.groups())
 
     def __str__(self):
-        descr = "Flight(valid=%s, fixes: %d" % (str(self.valid), len(self.fixes))
+        descr = "Flight(valid=%s, fixes: %d" % (
+            str(self.valid), len(self.fixes))
         if hasattr(self, 'thermals'):
             descr += ", thermals: %d" % len(self.thermals)
         descr += ")"
@@ -750,19 +777,21 @@ class Flight:
             rawtime_delta = math.fabs(
                 self.fixes[i+1].rawtime - self.fixes[i].rawtime)
             if rawtime_delta > 0.5:
-                if press_alt_delta / rawtime_delta > self.config.max_alt_change_rate():
+                if (press_alt_delta / rawtime_delta >
+                        self.config.max_alt_change_rate()):
                     press_huge_changes_num += 1
                 else:
                     press_chgs_sum += press_alt_delta
-                if gnss_alt_delta / rawtime_delta > self.config.max_alt_change_rate():
+                if (gnss_alt_delta / rawtime_delta >
+                        self.config.max_alt_change_rate()):
                     gnss_huge_changes_num += 1
                 else:
                     gnss_chgs_sum += gnss_alt_delta
             if (self.fixes[i].press_alt > self.config.max_alt()
-                or self.fixes[i].press_alt < self.config.min_alt()):
+                    or self.fixes[i].press_alt < self.config.min_alt()):
                 press_alt_violations_num += 1
             if (self.fixes[i].gnss_alt > self.config.max_alt() or
-                self.fixes[i].gnss_alt < self.config.min_alt()):
+                    self.fixes[i].gnss_alt < self.config.min_alt()):
                 gnss_alt_violations_num += 1
         press_chgs_avg = press_chgs_sum / float(len(self.fixes) - 1)
         gnss_chgs_avg = gnss_chgs_sum / float(len(self.fixes) - 1)
@@ -770,8 +799,8 @@ class Flight:
         press_alt_ok = True
         if press_chgs_avg < self.config.min_avg_abs_alt_change():
             self.notes.append(
-                "Warning: average pressure altitude change between fixes is: %f. "
-                "It is lower than the minimum: %f."
+                "Warning: average pressure altitude change between fixes "
+                "is: %f. It is lower than the minimum: %f."
                 % (press_chgs_avg, self.config.min_avg_abs_alt_change()))
             press_alt_ok = False
 
@@ -779,7 +808,8 @@ class Flight:
             self.notes.append(
                 "Warning: too many high changes in pressure altitude: %d. "
                 "Maximum allowed: %d."
-                % (press_huge_changes_num, self.config.max_alt_change_violations()))
+                % (press_huge_changes_num,
+                   self.config.max_alt_change_violations()))
             press_alt_ok = False
 
         if press_alt_violations_num > 0:
@@ -829,7 +859,7 @@ class Flight:
             f1 = self.fixes[i]
 
             if (f0.rawtime > f1.rawtime and
-                f1.rawtime + DAY < f0.rawtime + 200.0):
+                    f1.rawtime + DAY < f0.rawtime + 200.0):
                 # Day switch
                 days_added += 1
                 rawtime_to_add += DAY
@@ -922,7 +952,8 @@ class Flight:
             for i in xrange(curr_fix - 1, 0, -1):
                 time_dist = math.fabs(self.fixes[curr_fix].timestamp -
                                       self.fixes[i].timestamp)
-                if time_dist + 1e-7 > self.config.min_time_for_bearing_change():
+                if (time_dist >
+                        self.config.min_time_for_bearing_change() - 1e-7):
                     prev_fix = i
                     break
             return prev_fix
@@ -942,7 +973,8 @@ class Flight:
                         bearing_change -= 360.0
                 time_change = (self.fixes[prev_fix].timestamp -
                                self.fixes[curr_fix].timestamp)
-                self.fixes[curr_fix].bearing_change_rate = bearing_change/time_change
+                change_rate = bearing_change/time_change
+                self.fixes[curr_fix].bearing_change_rate = change_rate
 
     def _circling_emissions(self):
         """Generates raw circling/straight emissions from bearing change.
@@ -1006,7 +1038,8 @@ class Flight:
                 # Just ended circling
                 circling_now = False
                 thermal = Thermal(first_fix, fix)
-                if thermal.time_change() > self.config.min_time_for_thermal() - 1e-5:
+                if (thermal.time_change() >
+                        self.config.min_time_for_thermal() - 1e-5):
                     self.thermals.append(thermal)
                     # glide ends at start of thermal
                     glide = Glide(first_glide_fix, first_fix,
