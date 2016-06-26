@@ -464,88 +464,74 @@ class FlightParsingConfig(object):
     """Configuration for parsing an IGC file.
 
     Defines a set of parameters used to validate a file, and to detect
-    thermals and flight mode. Details in individual functions.
+    thermals and flight mode. Details in comments.
     """
 
-    # Flight validation options/limits.
-    def min_fixes(self):
-        """Minimum number of fixes in a file."""
-        return 50
+    #
+    # Flight validation parameters.
+    #
 
-    def max_seconds_between_fixes(self):
-        """Maximum time between fixes, seconds.
+    # Minimum number of fixes in a file.
+    min_fixes = 50
 
-        Soft limit, some fixes are allowed to exceed."""
-        return 30.0
+    # Maximum time between fixes, seconds.
+    # Soft limit, some fixes are allowed to exceed.
+    max_seconds_between_fixes = 50.0
 
-    def min_seconds_between_fixes(self):
-        """Minimum time between fixes, seconds.
+    # Minimum time between fixes, seconds.
+    # Soft limit, some fixes are allowed to exceed.
+    min_seconds_between_fixes = 1.0
 
-        Soft limit, some fixes are allowed to exceed."""
-        return 1.0
+    # Maximum number of fixes exceeding time between fix constraints.
+    max_time_violations = 10
 
-    def max_time_violations(self):
-        """Maximum number of fixes exceeding time between fix constraints."""
-        return 10
+    # Maximum number of times a file can cross the 0:00 UTC time.
+    max_new_days_in_flight = 2
 
-    def max_new_days_in_flight(self):
-        """Maximum number of times a file can cross the 0:00 UTC time."""
-        return 2
+    # Minimum average of absolute values of altitude changes in a file.
+    # This is needed to discover altitude sensors (either pressure or
+    # gps) that report either always constant altitude, or almost
+    # always constant altitude, and therefore are invalid. The unit
+    # is meters/fix.
+    min_avg_abs_alt_change = 0.01
 
-    def min_avg_abs_alt_change(self):
-        """Minimum average of absolute values of altitude changes in a file.
+    # Maximum altitude change per second between fixes, meters per second.
+    # Soft limit, some fixes are allowed to exceed."""
+    max_alt_change_rate = 50.0
 
-        This is needed to discover altitude sensors (either pressure or
-        gps) that report either always constant altitude, or almost
-        always constant altitude, and therefore are invalid. The unit
-        is meters/fix.
-        """
-        return 0.01
+    # Maximum number of fixes that exceed the altitude change limit.
+    max_alt_change_violations = 3
 
-    def max_alt_change_rate(self):
-        """Maximum altitude change per second between fixes, meters per second.
+    # Absolute maximum altitude, meters.
+    max_alt = 10000.0
 
-        Soft limit, some fixes are allowed to exceed."""
-        return 50.0
+    # Absolute minimum altitude, meters.
+    min_alt = -600.0
 
-    def max_alt_change_violations(self):
-        """Maximum number of fixes that exceed the altitude change limit."""
-        return 3
-
-    def max_alt(self):
-        """Absolute maximum altitude, meters."""
-        return 10000.0
-
-    def min_alt(self):
-        """Absolute minimum altitude, meters."""
-        return -600.0
-
+    #
     # Thermals and flight detection parameters.
-    def min_gsp_flight(self):
-        """Minimum ground speed to switch to flight mode, km/h."""
-        return 20.0
+    #
 
-    def min_bearing_change_circling(self):
-        """Minimum bearing change to enter a thermal, deg/sec."""
-        return 6.0
+    # Minimum ground speed to switch to flight mode, km/h.
+    min_gsp_flight = 20.0
 
-    def min_time_for_bearing_change(self):
-        """Minimum time between fixes to calculate bearing change, seconds.
+    # Minimum bearing change to enter a thermal, deg/sec.
+    min_bearing_change_circling = 6.0
 
-        See the usage for a more detailed comment on why this is useful.
-        """
-        return 5.0
+    # Minimum time between fixes to calculate bearing change, seconds.
+    # See the usage for a more detailed comment on why this is useful.
+    min_time_for_bearing_change = 5.0
 
-    def min_time_for_thermal(self):
-        """Minimum time to consider circling a thermal, seconds."""
-        return 60.0
+    # Minimum time to consider circling a thermal, seconds.
+    min_time_for_thermal = 60.0
 
 
 class Flight:
     """Parses IGC file, detects thermals and checks for record anomalies.
 
     Before using an instance of Flight check the `valid` attribute. An
-    invalid Flight instance is not usable.
+    invalid Flight instance is not usable. For an explaination why is
+    a Flight invalid see the `notes` attribute.
 
     General attributes:
         valid: a bool, whether the supplied record is considered valid
@@ -618,10 +604,10 @@ class Flight:
         self.fixes = fixes
         self.valid = True
         self.notes = []
-        if len(fixes) < self.config.min_fixes():
+        if len(fixes) < self.config.min_fixes:
             self.notes.append(
                 "Error: This file has %d fixes, less than "
-                "the minimum %d." % (len(fixes), self.config.min_fixes()))
+                "the minimum %d." % (len(fixes), self.config.min_fixes))
             self.valid = False
             return
 
@@ -778,38 +764,38 @@ class Flight:
                 self.fixes[i+1].rawtime - self.fixes[i].rawtime)
             if rawtime_delta > 0.5:
                 if (press_alt_delta / rawtime_delta >
-                        self.config.max_alt_change_rate()):
+                        self.config.max_alt_change_rate):
                     press_huge_changes_num += 1
                 else:
                     press_chgs_sum += press_alt_delta
                 if (gnss_alt_delta / rawtime_delta >
-                        self.config.max_alt_change_rate()):
+                        self.config.max_alt_change_rate):
                     gnss_huge_changes_num += 1
                 else:
                     gnss_chgs_sum += gnss_alt_delta
-            if (self.fixes[i].press_alt > self.config.max_alt()
-                    or self.fixes[i].press_alt < self.config.min_alt()):
+            if (self.fixes[i].press_alt > self.config.max_alt
+                    or self.fixes[i].press_alt < self.config.min_alt):
                 press_alt_violations_num += 1
-            if (self.fixes[i].gnss_alt > self.config.max_alt() or
-                    self.fixes[i].gnss_alt < self.config.min_alt()):
+            if (self.fixes[i].gnss_alt > self.config.max_alt or
+                    self.fixes[i].gnss_alt < self.config.min_alt):
                 gnss_alt_violations_num += 1
         press_chgs_avg = press_chgs_sum / float(len(self.fixes) - 1)
         gnss_chgs_avg = gnss_chgs_sum / float(len(self.fixes) - 1)
 
         press_alt_ok = True
-        if press_chgs_avg < self.config.min_avg_abs_alt_change():
+        if press_chgs_avg < self.config.min_avg_abs_alt_change:
             self.notes.append(
                 "Warning: average pressure altitude change between fixes "
                 "is: %f. It is lower than the minimum: %f."
-                % (press_chgs_avg, self.config.min_avg_abs_alt_change()))
+                % (press_chgs_avg, self.config.min_avg_abs_alt_change))
             press_alt_ok = False
 
-        if press_huge_changes_num > self.config.max_alt_change_violations():
+        if press_huge_changes_num > self.config.max_alt_change_violations:
             self.notes.append(
                 "Warning: too many high changes in pressure altitude: %d. "
                 "Maximum allowed: %d."
                 % (press_huge_changes_num,
-                   self.config.max_alt_change_violations()))
+                   self.config.max_alt_change_violations))
             press_alt_ok = False
 
         if press_alt_violations_num > 0:
@@ -819,19 +805,19 @@ class Flight:
             press_alt_ok = False
 
         gnss_alt_ok = True
-        if gnss_chgs_avg < self.config.min_avg_abs_alt_change():
+        if gnss_chgs_avg < self.config.min_avg_abs_alt_change:
             self.notes.append(
                 "Warning: average gnss altitude change between fixes is: %f. "
                 "It is lower than the minimum: %f."
-                % (gnss_chgs_avg, self.config.min_avg_abs_alt_change()))
+                % (gnss_chgs_avg, self.config.min_avg_abs_alt_change))
             gnss_alt_ok = False
 
-        if gnss_huge_changes_num > self.config.max_alt_change_violations():
+        if gnss_huge_changes_num > self.config.max_alt_change_violations:
             self.notes.append(
                 "Warning: too many high changes in gnss altitude: %d. "
                 "Maximum allowed: %d."
                 % (gnss_huge_changes_num,
-                   self.config.max_alt_change_violations()))
+                   self.config.max_alt_change_violations))
             gnss_alt_ok = False
 
         if gnss_alt_violations_num > 0:
@@ -866,23 +852,23 @@ class Flight:
             f1.rawtime += rawtime_to_add
 
             time_change = f1.rawtime - f0.rawtime
-            if time_change < self.config.min_seconds_between_fixes() - 1e-5:
+            if time_change < self.config.min_seconds_between_fixes - 1e-5:
                 rawtime_between_fix_exceeded += 1
-            if time_change > self.config.max_seconds_between_fixes() + 1e-5:
+            if time_change > self.config.max_seconds_between_fixes + 1e-5:
                 rawtime_between_fix_exceeded += 1
 
-        if rawtime_between_fix_exceeded > self.config.max_time_violations():
+        if rawtime_between_fix_exceeded > self.config.max_time_violations:
             self.notes.append(
                 "Error: too many fixes intervals exceed time between fixes "
                 "constraints. Allowed %d fixes, found %d fixes."
-                % (self.config.max_time_violations(),
+                % (self.config.max_time_violations,
                    rawtime_between_fix_exceeded))
             self.valid = False
-        if days_added > self.config.max_new_days_in_flight():
+        if days_added > self.config.max_new_days_in_flight:
             self.notes.append(
                 "Error: too many times did the flight cross the UTC 0:00 "
                 "barrier. Allowed %d times, found %d times."
-                % (self.config.max_new_days_in_flight(), days_added))
+                % (self.config.max_new_days_in_flight, days_added))
             self.valid = False
 
     def _compute_ground_speeds(self):
@@ -905,7 +891,7 @@ class Flight:
         """
         emissions = []
         for fix in self.fixes:
-            if fix.gsp > self.config.min_gsp_flight():
+            if fix.gsp > self.config.min_gsp_flight:
                 emissions.append(1)
             else:
                 emissions.append(0)
@@ -953,7 +939,7 @@ class Flight:
                 time_dist = math.fabs(self.fixes[curr_fix].timestamp -
                                       self.fixes[i].timestamp)
                 if (time_dist >
-                        self.config.min_time_for_bearing_change() - 1e-7):
+                        self.config.min_time_for_bearing_change - 1e-7):
                     prev_fix = i
                     break
             return prev_fix
@@ -986,7 +972,7 @@ class Flight:
         for fix in self.fixes:
             bearing_change = math.fabs(fix.bearing_change_rate)
             bearing_change_enough = (
-                bearing_change > self.config.min_bearing_change_circling())
+                bearing_change > self.config.min_bearing_change_circling)
             if fix.flying and bearing_change_enough:
                 emissions.append(1)
             else:
@@ -1039,7 +1025,7 @@ class Flight:
                 circling_now = False
                 thermal = Thermal(first_fix, fix)
                 if (thermal.time_change() >
-                        self.config.min_time_for_thermal() - 1e-5):
+                        self.config.min_time_for_thermal - 1e-5):
                     self.thermals.append(thermal)
                     # glide ends at start of thermal
                     glide = Glide(first_glide_fix, first_fix,
