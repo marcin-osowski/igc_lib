@@ -64,3 +64,44 @@ def bearing_to(lat1, lon1, lat2, lon2):
     x = (math.cos(lat1) * math.sin(lat2) -
          math.sin(lat1) * math.cos(lat2) * math.cos(dLon))
     return math.degrees(math.atan2(y, x))
+
+
+def sphere_angle(lat1, lon1, lat, lon, lat2, lon2):
+    """Computes the angle on a sphere given three points.
+
+    Input angles and the output angle are in degrees. The first
+    input point denotes the first side of the angle, the second
+    input point is the vertex of the angle, the third input point
+    denotes the second side of the angle.
+
+    Example (output=90.0):
+    (lat=0.0, lon=0.0) -------- (lat1=0.0, lon1=10.0)
+        |
+        |
+    (lat2=-20.0, lon2=0.0)
+
+    Args:
+        lat1: a float, latitude of the first point
+        lon1: a float, longitude of the first point
+        lat: a float, latitude of the vertex.
+        lon: a float, longitude of the vertex.
+        lat2: a float, latitude of the second point.
+        lon2: a float, latitude of the second point.
+
+    Returns:
+        A float, the angle between the points.
+    """
+    lat1, lon1, lat, lon, lat2, lon2 = map(
+        math.radians, [lat1, lon1, lat, lon, lat2, lon2])
+    side1 = sphere_distance(lat, lon, lat1, lon1)
+    side2 = sphere_distance(lat, lon, lat2, lon2)
+    opposite = sphere_distance(lat1, lon1, lat2, lon2)
+    cosine = (math.cos(opposite) - math.cos(side1) * math.cos(side2))
+    cosine /= (math.sin(side1) * math.sin(side2))
+
+    if cosine > 1.0:
+        cosine = 1.0
+    if cosine < -1.0:
+        cosine = -1.0
+    angle = math.acos(cosine)
+    return math.degrees(angle)
