@@ -241,6 +241,7 @@ class GNSSFix:
         extras: a string, B record extensions
 
     Derived attributes:
+        index: an integer, the position of the fix in the IGC file
         timestamp: a float, true timestamp (since epoch), UTC, seconds
         alt: a float, either press_alt or gnss_alt
         gsp: a float, current ground speed, km/h
@@ -251,11 +252,12 @@ class GNSSFix:
     """
 
     @staticmethod
-    def build_from_B_record(B_record_line):
+    def build_from_B_record(B_record_line, index):
         """Creates GNSSFix object from IGC B-record line.
 
         Args:
             B_record_line: a string, B record line from an IGC file
+            index: the zero-based position of the fix in the parent IGC file
 
         Returns:
             The created GNSSFix object
@@ -292,10 +294,10 @@ class GNSSFix:
         gnss_alt = float(gnss_alt)
 
         return GNSSFix(rawtime, lat, lon, validity, press_alt, gnss_alt,
-                       extras)
+                       index, extras)
 
     def __init__(self, rawtime, lat, lon, validity, press_alt, gnss_alt,
-                 extras):
+                 index, extras):
         """Initializer of GNSSFix. Not meant to be used directly."""
         self.rawtime = rawtime
         self.lat = lat
@@ -303,6 +305,7 @@ class GNSSFix:
         self.validity = validity
         self.press_alt = press_alt
         self.gnss_alt = gnss_alt
+        self.index = index
         self.extras = extras
         self.flight = None
 
@@ -585,7 +588,7 @@ class Flight:
                 if line[0] == 'A':
                     a_records.append(line)
                 elif line[0] == 'B':
-                    fix = GNSSFix.build_from_B_record(line)
+                    fix = GNSSFix.build_from_B_record(line, index=len(fixes))
                     if fix is not None:
                         fixes.append(fix)
                 elif line[0] == 'I':

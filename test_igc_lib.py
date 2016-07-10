@@ -69,6 +69,10 @@ class TestNapretFlightParsing(unittest.TestCase):
     def testBRecordsParsing(self):
         self.assertEqual(len(self.flight.fixes), 5380)
 
+    def testFixesHaveCorrectIndices(self):
+        for i, fix in enumerate(self.flight.fixes):
+            self.assertEqual(i, fix.index)
+
     def testFlightsDetection(self):
         # Basic test, there should be at least one thermal
         self.assertGreater(len(self.flight.thermals), 0)
