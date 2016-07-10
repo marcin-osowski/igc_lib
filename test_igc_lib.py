@@ -96,3 +96,37 @@ class TestNapretFlightParsing(unittest.TestCase):
     def testSomeFixesAreNotInCircling(self):
         self.assertTrue(
             any(map(lambda fix: not fix.circling, self.flight.fixes)))
+
+
+class TestOlsztynFlightParsing(unittest.TestCase):
+
+    def setUp(self):
+        test_file = 'testfiles/olsztyn.igc'
+        self.flight = igc_lib.Flight.create_from_file(test_file)
+
+    def testFileParsesOK(self):
+        self.assertTrue(self.flight.valid)
+        self.assertListEqual(self.flight.notes, [])
+
+    def testMetadataIsCorrectlyRead(self):
+        self.assertEqual(self.flight.fr_manuf_code, 'LXN')
+        self.assertEqual(self.flight.fr_uniq_id, 'ABC')
+        self.assertEqual(
+            self.flight.i_record,
+            'I073638FXA3941ENL4246TAS4751GSP5254TRT5559VAT6063OAT')
+        # 2011-09-02 0:00 UTC
+        self.assertAlmostEqual(self.flight.date_timestamp, 1314921600.0)
+        self.assertEqual(self.flight.glider_type, 'test_glider_xx')
+        self.assertEqual(self.flight.competition_class,
+                         'some_competition_class')
+        self.assertEqual(self.flight.fr_firmware_version, '2.2')
+        self.assertEqual(self.flight.fr_hardware_version, '2')
+        self.assertEqual(self.flight.fr_recorder_type,
+                         'LXNAVIGATION,LX8000F')
+        self.assertEqual(self.flight.fr_gps_receiver,
+                         'uBLOX LEA-4S-2,16,max9000m')
+        self.assertEqual(self.flight.fr_pressure_sensor,
+                         'INTERSEMA,MS5534A,max10000m')
+
+    def testBRecordsParsing(self):
+        self.assertEqual(len(self.flight.fixes), 2469)
