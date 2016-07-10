@@ -540,6 +540,8 @@ class Flight:
         fixes: a list of GNSSFix objects, one per each valid B record
         thermals: a list of Thermal objects, the detected thermals
         glides: a list of Glide objects, the glides between thermals
+        takeoff_fix: a GNSSFix object, the fix at which takeoff was detected
+        landing_fix: a GNSSFix object, the fix at which landing was detected
 
     IGC metadata attributes (some might be missing if the flight does not
     define them):
@@ -645,6 +647,12 @@ class Flight:
 
         self._compute_ground_speeds()
         self._compute_flight()
+        self._compute_takeoff_landing()
+        if not hasattr(self, 'takeoff_fix'):
+            self.notes.append("Error: did not detect takeoff.")
+            self.valid = False
+            return
+
         self._compute_bearings()
         self._compute_bearing_change_rates()
         self._compute_circling()
@@ -918,6 +926,34 @@ class Flight:
         for fix, output in zip(self.fixes, output):
             fix.flying = (output == 1)
 
+    def _compute_takeoff_landing(self):
+        """Finds the takeoff and landing fixes in the log.
+
+        Takeoff fix is the first fix in the flying mode. Landing fix
+        is the next fix after the last fix in the flying mode or the
+        last fix in the file.
+        """
+        takeoff_fix = None
+        landing_fix = None
+        was_flying = False
+        for fix in self.fixes:
+            if fix.flying and takeoff_fix is None:
+                takeoff_fix = fix
+            if not fix.flying and was_flying:
+                landing_fix = fix
+            was_flying = fix.flying
+
+        if takeoff_fix is None:
+            # No takeoff found.
+            return
+
+        if landing_fix is None:
+            # Landing on the last fix
+            landing_fix = self.fixes[-1]
+
+        self.takeoff_fix = takeoff_fix
+        self.landing_fix = landing_fix
+
     def _compute_bearings(self):
         """Adds bearing info to self.fixes."""
         for i in xrange(len(self.fixes) - 1):
@@ -1014,6 +1050,7 @@ class Flight:
         first_glide_fix = None
         last_glide_fix = None
         distance = 0.0
+        # TODO(moso): go only through the fixes between takeoff and landing.
         for fix in self.fixes:
             if not circling_now and fix.circling:
                 # Just started circling

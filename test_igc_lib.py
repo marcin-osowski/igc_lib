@@ -85,6 +85,12 @@ class TestNapretFlightParsing(unittest.TestCase):
         self.assertTrue(
             any(map(lambda fix: not fix.flying, self.flight.fixes)))
 
+    def testHasTakeoff(self):
+        self.assertTrue(hasattr(self.flight, 'takeoff_fix'))
+
+    def testHasLanding(self):
+        self.assertTrue(hasattr(self.flight, 'landing_fix'))
+
     def testSomeFixesAreInCircling(self):
         self.assertTrue(
             any(map(lambda fix: fix.circling, self.flight.fixes)))

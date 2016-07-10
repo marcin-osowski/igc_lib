@@ -104,22 +104,22 @@ def dump_flight_to_kml(flight, kml_filename):
     """Dumps the flight to KML format.
 
     Args:
-        flight: an igc_lib.Flight, the flight to be written
-        kml_filename: a string, the name of the output file.
+        flight: an igc_lib.Flight, the flight to be saved
+        kml_filename: a string, the name of the output file
     """
+    assert flight.valid
     kml = simplekml.Kml()
 
     def add_point(name, fix):
         kml.newpoint(name=name, coords=[(fix.lon, fix.lat)])
 
-    if False:
-        for fix in flight.fixes:
-            add_point(name="fix", fix=fix)
-
     coords = []
     for fix in flight.fixes:
         coords.append((fix.lon, fix.lat))
     kml.newlinestring(coords=coords)
+
+    add_point(name="Takeoff", fix=flight.takeoff_fix)
+    add_point(name="Landing", fix=flight.landing_fix)
 
     for i, thermal in enumerate(flight.thermals):
         add_point(name="thermal_%02d" % i, fix=thermal.enter_fix)
