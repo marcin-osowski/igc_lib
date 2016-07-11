@@ -23,11 +23,17 @@ if __name__ == "__main__":
     kml_file = "%s-flight.kml" % input_base_file
 
     flight = igc_lib.Flight.create_from_file(input_file)
-    print "flight =", flight
-    print "fixes[0] =", flight.fixes[0]
+    print "Flight:", flight
+    if not flight.valid:
+        print "Provided flight is invalid:"
+        print flight.notes
+        sys.exit(1)
+
+    print "Takeoff:", flight.takeoff_fix
     for x, (thermal, glide) in enumerate(zip(flight.thermals, flight.glides)):
-        print "glide[%d] = " % x, glide
-        print "thermals[%d] = " % x, thermal
+        print "  glide[%d]:" % x, glide
+        print "  thermal[%d]:" % x, thermal
+    print "Landing:", flight.landing_fix
 
     print "Dumping thermals to %s, %s and %s" % (
         wpt_file, cup_file, thermals_csv_file)
