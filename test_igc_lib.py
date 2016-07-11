@@ -103,6 +103,30 @@ class TestNapretFlightParsing(unittest.TestCase):
         self.assertTrue(
             any(map(lambda fix: not fix.circling, self.flight.fixes)))
 
+    def testThermalsAreAfterTakeoff(self):
+        takeoff_index = self.flight.takeoff_fix.index
+        for thermal in self.flight.thermals:
+            self.assertGreaterEqual(thermal.enter_fix.index, takeoff_index)
+            self.assertGreaterEqual(thermal.exit_fix.index, takeoff_index)
+
+    def testThermalsAreBeforeLanding(self):
+        landing_index = self.flight.landing_fix.index
+        for thermal in self.flight.thermals:
+            self.assertLessEqual(thermal.enter_fix.index, landing_index)
+            self.assertLessEqual(thermal.exit_fix.index, landing_index)
+
+    def testGlidesAreAfterTakeoff(self):
+        takeoff_index = self.flight.takeoff_fix.index
+        for glide in self.flight.glides:
+            self.assertGreaterEqual(glide.enter_fix.index, takeoff_index)
+            self.assertGreaterEqual(glide.exit_fix.index, takeoff_index)
+
+    def testGlidesAreBeforeLanding(self):
+        landing_index = self.flight.landing_fix.index
+        for glide in self.flight.glides:
+            self.assertLessEqual(glide.enter_fix.index, landing_index)
+            self.assertLessEqual(glide.exit_fix.index, landing_index)
+
 
 class TestOlsztynFlightParsing(unittest.TestCase):
 

@@ -1045,6 +1045,10 @@ class Flight:
         the fixes and there is still an open glide (i.e. flight not finishing
         in a valid thermal) the glide will be closed.
         """
+        takeoff_index = self.takeoff_fix.index
+        landing_index = self.landing_fix.index
+        flight_fixes = self.fixes[takeoff_index:landing_index + 1]
+
         self.thermals = []
         self.glides = []
         circling_now = False
@@ -1053,8 +1057,7 @@ class Flight:
         first_glide_fix = None
         last_glide_fix = None
         distance = 0.0
-        # TODO(moso): go only through the fixes between takeoff and landing.
-        for fix in self.fixes:
+        for fix in flight_fixes:
             if not circling_now and fix.circling:
                 # Just started circling
                 circling_now = True
