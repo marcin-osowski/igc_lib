@@ -592,7 +592,12 @@ class Flight:
                 elif line[0] == 'B':
                     fix = GNSSFix.build_from_B_record(line, index=len(fixes))
                     if fix is not None:
-                        fixes.append(fix)
+                        if fixes and math.fabs(fix.rawtime - fixes[-1].rawtime) < 1e-5:
+                            # The time did not change since the previous fix.
+                            # Ignore this fix.
+                            pass
+                        else:
+                            fixes.append(fix)
                 elif line[0] == 'I':
                     i_records.append(line)
                 elif line[0] == 'H':
@@ -619,6 +624,7 @@ class Flight:
         self._check_altitudes()
         if not self.valid:
             return
+
         self._check_fix_rawtime()
         if not self.valid:
             return
