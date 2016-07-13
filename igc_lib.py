@@ -170,17 +170,19 @@ class Task:
         self.start_time = start_time
         self.end_time = end_time
 
-    def check_flight(self, Flight):
+    def check_flight(self, flight):
         """ Checks a Flight object against the task.
+
             Args:
-                   Flight: a Flight object
+                flight: a Flight object
+
             Returns:
-                    a list of GNSSFixes of when turnpoints were achieved.
+                a list of GNSSFixes of when turnpoints were achieved.
         """
         reached_turnpoints = []
         proceed_to_start = False
         t = 0
-        for fix in Flight.fixes:
+        for fix in flight.fixes:
             if t >= len(self.turnpoints):
                 # Pilot has arrived in goal (last turnpoint) so we can stop.
                 break
