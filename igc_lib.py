@@ -854,13 +854,14 @@ class Flight:
         for i in xrange(1, len(self.fixes)):
             f0 = self.fixes[i-1]
             f1 = self.fixes[i]
+            f1.rawtime += rawtime_to_add
 
             if (f0.rawtime > f1.rawtime and
                     f1.rawtime + DAY < f0.rawtime + 200.0):
                 # Day switch
                 days_added += 1
                 rawtime_to_add += DAY
-            f1.rawtime += rawtime_to_add
+                f1.rawtime += DAY
 
             time_change = f1.rawtime - f0.rawtime
             if time_change < self._config.min_seconds_between_fixes - 1e-5:

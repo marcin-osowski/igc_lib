@@ -160,3 +160,14 @@ class TestOlsztynFlightParsing(unittest.TestCase):
 
     def testBRecordsParsing(self):
         self.assertEqual(len(self.flight.fixes), 2469)
+
+
+class TestNewZealandFlightParsing(unittest.TestCase):
+
+    def setUp(self):
+        test_file = 'testfiles/new_zealand.igc'
+        self.flight = igc_lib.Flight.create_from_file(test_file)
+
+    def testFileParsesOK(self):
+        self.assertTrue(self.flight.valid)
+        self.assertListEqual(self.flight.notes, [])
