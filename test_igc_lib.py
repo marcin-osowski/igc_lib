@@ -128,6 +128,22 @@ class TestNapretFlightParsing(unittest.TestCase):
             self.assertLessEqual(glide.exit_fix.index, landing_index)
 
 
+class TestNoTimeIncrementFlightParsing(unittest.TestCase):
+
+    def setUp(self):
+        test_file = 'testfiles/no_time_increment.igc'
+        self.flight = igc_lib.Flight.create_from_file(test_file)
+
+    def testFileParsesOK(self):
+        self.assertTrue(self.flight.valid)
+        self.assertListEqual(self.flight.notes, [])
+
+    def testBRecordsParsing(self):
+        # There are 200 B records in the file, but the last
+        # 50 do not increment the time, and therefore should be dropped.
+        self.assertEqual(len(self.flight.fixes), 150)
+
+
 class TestOlsztynFlightParsing(unittest.TestCase):
 
     def setUp(self):
