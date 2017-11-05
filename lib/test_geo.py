@@ -147,7 +147,7 @@ class TestSphereAngle(unittest.TestCase):
                 lat1=0.0, lon1=-20.0,
                 lat=0.0, lon=0.0,
                 lat2=0.0, lon2=-40.0),
-            0.0)
+            0.0, places=5)
 
     def testHalfAngleOnTheEquator(self):
         self.assertAlmostEqual(
