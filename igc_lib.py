@@ -18,13 +18,15 @@ import datetime
 import math
 import re
 import xml.dom.minidom
+from pathlib import Path
+
 from collections import defaultdict
 
-import lib.viterbi
-import lib.geo
+import lib.viterbi as viterbi
+import lib.geo as geo
 
 
-def _strip_non_printable_chars(string):
+def _strip_non_printable_chars(string: str):
     """Filters a string removing non-printable characters.
 
     Args:
@@ -35,7 +37,9 @@ def _strip_non_printable_chars(string):
     """
     printable = set("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKL"
                     "MNOPQRSTUVWXYZ!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~ ")
-    return filter(lambda x: x in printable, string)
+
+    printable_string = [x for x in string if x in printable]
+    return ''.join(printable_string)
 
 
 def _rawtime_float_to_hms(timef):
@@ -76,7 +80,7 @@ class Turnpoint:
 
     def in_radius(self, fix):
         """Checks whether the provided GNSSFix is within the radius"""
-        distance = lib.geo.earth_distance(self.lat, self.lon, fix.lat, fix.lon)
+        distance = geo.earth_distance(self.lat, self.lon, fix.lat, fix.lon)
         return distance < self.radius
 
 
@@ -333,11 +337,11 @@ class GNSSFix:
 
     def bearing_to(self, other):
         """Computes bearing in degrees to another GNSSFix."""
-        return lib.geo.bearing_to(self.lat, self.lon, other.lat, other.lon)
+        return geo.bearing_to(self.lat, self.lon, other.lat, other.lon)
 
     def distance_to(self, other):
         """Computes great circle distance in kilometers to another GNSSFix."""
-        return lib.geo.earth_distance(self.lat, self.lon, other.lat, other.lon)
+        return geo.earth_distance(self.lat, self.lon, other.lat, other.lon)
 
     def to_B_record(self):
         """Reconstructs an IGC B-record."""
@@ -584,7 +588,8 @@ class Flight:
         a_records = []
         i_records = []
         h_records = []
-        with open(filename, 'r') as flight_file:
+        abs_filename = Path(filename).expanduser().absolute()
+        with open(abs_filename, 'r') as flight_file:
             for line in flight_file:
                 line = line.replace('\n', '').replace('\r', '')
                 if not line:
@@ -702,8 +707,8 @@ class Flight:
                 'HFDTE(\d\d)(\d\d)(\d\d)',
                 record, flags=re.IGNORECASE)
             if match:
-                dd, mm, yy = map(_strip_non_printable_chars, match.groups())
-                year = int("20%s" % yy)
+                dd, mm, yy = [_strip_non_printable_chars(group) for group in match.groups()]
+                year = int(2000 + int(yy))
                 month = int(mm)
                 day = int(dd)
                 if 1 <= month <= 12 and 1 <= day <= 31:
@@ -774,7 +779,7 @@ class Flight:
         gnss_huge_changes_num = 0
         press_chgs_sum = 0.0
         gnss_chgs_sum = 0.0
-        for i in xrange(len(self.fixes) - 1):
+        for i in range(len(self.fixes) - 1):
             press_alt_delta = math.fabs(
                 self.fixes[i+1].press_alt - self.fixes[i].press_alt)
             gnss_alt_delta = math.fabs(
@@ -859,7 +864,7 @@ class Flight:
         days_added = 0
         rawtime_to_add = 0.0
         rawtime_between_fix_exceeded = 0
-        for i in xrange(1, len(self.fixes)):
+        for i in range(1, len(self.fixes)):
             f0 = self.fixes[i-1]
             f1 = self.fixes[i]
             f1.rawtime += rawtime_to_add
@@ -894,7 +899,7 @@ class Flight:
     def _compute_ground_speeds(self):
         """Adds ground speed info (km/h) to self.fixes."""
         self.fixes[0].gsp = 0.0
-        for i in xrange(1, len(self.fixes)):
+        for i in range(1, len(self.fixes)):
             dist = self.fixes[i].distance_to(self.fixes[i-1])
             rawtime = self.fixes[i].rawtime - self.fixes[i-1].rawtime
             if math.fabs(rawtime) < 1e-5:
@@ -921,7 +926,7 @@ class Flight:
     def _compute_flight(self):
         """Adds boolean flag .flying to self.fixes."""
         emissions = self._flying_emissions()
-        decoder = lib.viterbi.SimpleViterbiDecoder(
+        decoder = viterbi.SimpleViterbiDecoder(
             # More likely to start the log standing, i.e. not in flight
             init_probs=[0.80, 0.20],
             transition_probs=[
@@ -968,7 +973,7 @@ class Flight:
 
     def _compute_bearings(self):
         """Adds bearing info to self.fixes."""
-        for i in xrange(len(self.fixes) - 1):
+        for i in range(len(self.fixes) - 1):
             self.fixes[i].bearing = self.fixes[i].bearing_to(self.fixes[i+1])
         self.fixes[-1].bearing = self.fixes[-2].bearing
 
@@ -983,7 +988,7 @@ class Flight:
         def find_prev_fix(curr_fix):
             """Computes the previous fix to be used in bearing rate change."""
             prev_fix = None
-            for i in xrange(curr_fix - 1, 0, -1):
+            for i in range(curr_fix - 1, 0, -1):
                 time_dist = math.fabs(self.fixes[curr_fix].timestamp -
                                       self.fixes[i].timestamp)
                 if (time_dist >
@@ -992,7 +997,7 @@ class Flight:
                     break
             return prev_fix
 
-        for curr_fix in xrange(len(self.fixes)):
+        for curr_fix in range(len(self.fixes)):
             prev_fix = find_prev_fix(curr_fix)
 
             if prev_fix is None:
@@ -1030,7 +1035,7 @@ class Flight:
     def _compute_circling(self):
         """Adds .circling to self.fixes."""
         emissions = self._circling_emissions()
-        decoder = lib.viterbi.SimpleViterbiDecoder(
+        decoder = viterbi.SimpleViterbiDecoder(
             # More likely to start in straight flight than in circling
             init_probs=[0.80, 0.20],
             transition_probs=[
@@ -1044,7 +1049,7 @@ class Flight:
 
         output = decoder.decode(emissions)
 
-        for i in xrange(len(self.fixes)):
+        for i in range(len(self.fixes)):
             self.fixes[i].circling = (output[i] == 1)
 
     def _find_thermals(self):
