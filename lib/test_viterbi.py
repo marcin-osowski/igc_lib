@@ -1,6 +1,6 @@
 import unittest
 
-import viterbi
+import lib.viterbi as viterbi
 
 
 class TestSimpleViterbiDecoder(unittest.TestCase):
@@ -28,12 +28,12 @@ class TestSimpleViterbiDecoder(unittest.TestCase):
         self.assertDecode([], [])
 
     def testSimpleDecodeZeros(self):
-        for i in xrange(20):
+        for i in range(20):
             data = [0] * i
             self.assertDecode(data, data)
 
     def testSimpleDecodeOnes(self):
-        for i in xrange(20):
+        for i in range(20):
             data = [1] * i
             self.assertDecode(data, data)
 

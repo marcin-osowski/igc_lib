@@ -1,5 +1,6 @@
 import collections
 import simplekml
+from pathlib import Path
 
 
 def _degrees_float_to_degrees_minutes_seconds(dd, lon_or_lat):
@@ -34,16 +35,17 @@ def _degrees_float_to_degrees_minutes_seconds(dd, lon_or_lat):
     return ddmmss(hemisphere, degrees, minutes, seconds)
 
 
-def dump_thermals_to_wpt_file(flight, wptfilename, endpoints=False):
+def dump_thermals_to_wpt_file(flight, wptfilename_local, endpoints=False):
     """Dump flight's thermals to a .wpt file in Geo format.
 
     Args:
         flight: an igc_lib.Flight, the flight to be written
-        wptfilename: File to be written. If it exists it will be overwritten.
+        wptfilename_local: File to be written. If it exists it will be overwritten.
         endpoints: optional argument. If true thermal endpoints as well
         as startpoints will be written with suffix END in the waypoint label.
     """
-    with open(wptfilename, 'wt') as wpt:
+    wptfilename = Path(wptfilename_local).expanduser().absolute()
+    with open(wptfilename, 'w') as wpt:
         wpt.write("$FormatGEO\n")
 
         for x, thermal in enumerate(flight.thermals):
@@ -72,13 +74,14 @@ def dump_thermals_to_wpt_file(flight, wptfilename, endpoints=False):
                     flight.thermals[x].exit_fix.gnss_alt))
 
 
-def dump_thermals_to_cup_file(flight, cup_filename):
+def dump_thermals_to_cup_file(flight, cup_filename_local):
     """Dump flight's thermals to a .cup file (SeeYou).
 
     Args:
         flight: an igc_lib.Flight, the flight to be written
-        cup_filename: a string, the name of the file to be written.
+        cup_filename_local: a string, the name of the file to be written.
     """
+    cup_filename = Path(cup_filename_local).expanduser().absolute()
     with open(cup_filename, 'wt') as wpt:
         wpt.write('name,code,country,lat,')
         wpt.write('lon,elev,style,rwdir,rwlen,freq,desc,userdata,pics\n')
@@ -100,12 +103,12 @@ def dump_thermals_to_cup_file(flight, cup_filename):
             write_fix('%02d_END' % i, thermal.exit_fix)
 
 
-def dump_flight_to_kml(flight, kml_filename):
+def dump_flight_to_kml(flight, kml_filename_local):
     """Dumps the flight to KML format.
 
     Args:
         flight: an igc_lib.Flight, the flight to be saved
-        kml_filename: a string, the name of the output file
+        kml_filename_local: a string, the name of the output file
     """
     assert flight.valid
     kml = simplekml.Kml()
@@ -124,19 +127,19 @@ def dump_flight_to_kml(flight, kml_filename):
     for i, thermal in enumerate(flight.thermals):
         add_point(name="thermal_%02d" % i, fix=thermal.enter_fix)
         add_point(name="thermal_%02d_END" % i, fix=thermal.exit_fix)
-
+        kml_filename = Path(kml_filename_local).expanduser().absolute()
     kml.save(kml_filename)
 
 
-def dump_flight_to_csv(flight, track_filename, thermals_filename):
+def dump_flight_to_csv(flight, track_filename_local: str, thermals_filename_local: str):
     """Dumps flight data to CSV files.
 
     Args:
         flight: an igc_lib.Flight, the flight to be written
-        track_filename: a string, the name of the output CSV with fixes data
-        thermals_filename: a string, the name of the output CSV with thermals
-        data
+        track_filename_local: a string, the name of the output CSV with track data
+        thermals_filename_local: a string, the name of the output CSV with thermal data
     """
+    track_filename = Path(track_filename_local).expanduser().absolute()
     with open(track_filename, 'wt') as csv:
         csv.write("timestamp,lat,lon,bearing,bearing_change_rate,"
                   "gsp,flying,circling\n")
@@ -146,6 +149,7 @@ def dump_flight_to_csv(flight, track_filename, thermals_filename):
                 fix.bearing, fix.bearing_change_rate,
                 fix.gsp, str(fix.flying), str(fix.circling)))
 
+    thermals_filename = Path(thermals_filename_local).expanduser().absolute()
     with open(thermals_filename, 'wt') as csv:
         csv.write("timestamp_enter,timestamp_exit\n")
         for thermal in flight.thermals:

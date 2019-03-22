@@ -1,7 +1,7 @@
 import math
 import unittest
 
-import geo
+import lib.geo as geo
 
 
 class TestSphereDistance(unittest.TestCase):
