@@ -21,13 +21,13 @@ class SimpleViterbiDecoder(object):
         """
         assert len(init_probs) == 2
         assert len(transition_probs) == 2
-        assert map(len, transition_probs) == [2, 2]
+        assert list(map(len, transition_probs)) == [2, 2]
         assert len(emission_probs) == 2
-        assert map(len, emission_probs) == [2, 2]
+        assert list(map(len, emission_probs)) == [2, 2]
 
-        self._init_log = map(math.log, init_probs)
-        self._transition_log = [map(math.log, xs) for xs in transition_probs]
-        self._emission_log = [map(math.log, xs) for xs in emission_probs]
+        self._init_log = list(map(math.log, init_probs))
+        self._transition_log = [list(map(math.log, xs)) for xs in transition_probs]
+        self._emission_log = [list(map(math.log, xs)) for xs in emission_probs]
 
     def decode(self, emissions):
         """Run the Viterbi decoder.
@@ -43,8 +43,8 @@ class SimpleViterbiDecoder(object):
             return []
 
         N = len(emissions)
-        state_log = [[None, None] for i in xrange(N)]
-        backtrack_info = [[None, None] for i in xrange(N)]
+        state_log = [[None, None] for i in range(N)]
+        backtrack_info = [[None, None] for i in range(N)]
 
         # Forward pass, calculate the probabilities of states and the
         # back-tracking information.
@@ -57,7 +57,7 @@ class SimpleViterbiDecoder(object):
 
         # Successive state probability estimates are calculated using
         # the log-probabilities in the transition matrix.
-        for i in xrange(1, N):
+        for i in range(1, N):
             for target in [0, 1]:
                 from_0 = state_log[i - 1][0] + self._transition_log[0][target]
                 from_1 = state_log[i - 1][1] + self._transition_log[1][target]
@@ -76,7 +76,7 @@ class SimpleViterbiDecoder(object):
             state = 1
 
         states = [state]
-        for i in xrange(N - 1, 0, -1):
+        for i in range(N - 1, 0, -1):
             state = backtrack_info[i][state]
             states.append(state)
         states.reverse()

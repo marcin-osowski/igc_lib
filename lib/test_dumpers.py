@@ -4,7 +4,7 @@ import unittest
 import tempfile
 
 import igc_lib
-import dumpers
+import lib.dumpers as dumpers
 
 
 class TestDumpers(unittest.TestCase):
