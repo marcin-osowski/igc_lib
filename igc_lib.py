@@ -704,7 +704,7 @@ class Flight:
     def _parse_h_record(self, record):
         if record[0:5] == 'HFDTE':
             match = re.match(
-                'HFDTE(\d\d)(\d\d)(\d\d)',
+                '(?:HFDTE|HFDTEDATE:)(\d\d)(\d\d)(\d\d)',
                 record, flags=re.IGNORECASE)
             if match:
                 dd, mm, yy = [_strip_non_printable_chars(group) for group in match.groups()]
