@@ -18,7 +18,7 @@ import datetime
 import math
 import re
 import xml.dom.minidom
-from pathlib import Path
+from pathlib2 import Path
 
 from collections import defaultdict
 
@@ -26,7 +26,7 @@ import lib.viterbi as viterbi
 import lib.geo as geo
 
 
-def _strip_non_printable_chars(string: str):
+def _strip_non_printable_chars(string):
     """Filters a string removing non-printable characters.
 
     Args:
@@ -589,7 +589,7 @@ class Flight:
         i_records = []
         h_records = []
         abs_filename = Path(filename).expanduser().absolute()
-        with open(abs_filename, 'r') as flight_file:
+        with abs_filename.open('r') as flight_file:
             for line in flight_file:
                 line = line.replace('\n', '').replace('\r', '')
                 if not line:
