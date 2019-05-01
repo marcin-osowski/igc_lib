@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import itertools
 import os
 import sys
 
@@ -10,12 +9,13 @@ import lib.dumpers as dumpers
 def print_flight_details(flight):
     print("Flight:", flight)
     print("Takeoff:", flight.takeoff_fix)
-    zipped = itertools.zip_longest(flight.thermals, flight.glides)
-    for x, (thermal, glide) in enumerate(zipped):
-        if glide:
-            print("  glide[%d]:" % x, glide)
-        if thermal:
-            print("  thermal[%d]:" % x, thermal)
+    thermals = flight.thermals
+    glides = flight.glides
+    for i in range(max(len(thermals), len(glides))):
+        if i < len(glides):
+            print("  glide[%d]:" % i, glides[i])
+        if i < len(thermals):
+            print("  thermal[%d]:" % i, thermals[i])
     print("Landing:", flight.landing_fix)
 
 
