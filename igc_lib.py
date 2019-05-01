@@ -589,7 +589,7 @@ class Flight:
         i_records = []
         h_records = []
         abs_filename = Path(filename).expanduser().absolute()
-        with abs_filename.open('r') as flight_file:
+        with abs_filename.open('r', encoding="ISO-8859-1") as flight_file:
             for line in flight_file:
                 line = line.replace('\n', '').replace('\r', '')
                 if not line:
@@ -704,7 +704,7 @@ class Flight:
     def _parse_h_record(self, record):
         if record[0:5] == 'HFDTE':
             match = re.match(
-                'HFDTE(\d\d)(\d\d)(\d\d)',
+                '(?:HFDTE|HFDTEDATE:)(\d\d)(\d\d)(\d\d)',
                 record, flags=re.IGNORECASE)
             if match:
                 dd, mm, yy = [_strip_non_printable_chars(group) for group in match.groups()]
