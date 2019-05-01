@@ -41,8 +41,8 @@ class TestNapretFlightParsing(unittest.TestCase):
         self.flight = igc_lib.Flight.create_from_file(test_file)
 
     def testFileParsesOK(self):
-        self.assertTrue(self.flight.valid)
         self.assertListEqual(self.flight.notes, [])
+        self.assertTrue(self.flight.valid)
 
     def testBothPressureSensorsAreOK(self):
         self.assertTrue(self.flight.press_alt_valid)
@@ -128,6 +128,21 @@ class TestNapretFlightParsing(unittest.TestCase):
             self.assertLessEqual(glide.exit_fix.index, landing_index)
 
 
+class TestNewIGCDateIncrement(unittest.TestCase):
+
+    def setUp(self):
+        test_file = "testfiles/new_date_format.igc"
+        self.flight = igc_lib.Flight.create_from_file(test_file)
+
+    def testFileParsesOK(self):
+        self.assertListEqual(self.flight.notes, [])
+        self.assertTrue(self.flight.valid)
+
+    def testDateIsReadCorrectly(self):
+        # 2018-04-03 0:00 UTC
+        self.assertAlmostEqual(self.flight.date_timestamp, 1522713600.0)
+
+
 class TestNoTimeIncrementFlightParsing(unittest.TestCase):
 
     def setUp(self):
@@ -135,8 +150,8 @@ class TestNoTimeIncrementFlightParsing(unittest.TestCase):
         self.flight = igc_lib.Flight.create_from_file(test_file)
 
     def testFileParsesOK(self):
-        self.assertTrue(self.flight.valid)
         self.assertListEqual(self.flight.notes, [])
+        self.assertTrue(self.flight.valid)
 
     def testBRecordsParsing(self):
         # There are 200 B records in the file, but the last
@@ -151,8 +166,8 @@ class TestOlsztynFlightParsing(unittest.TestCase):
         self.flight = igc_lib.Flight.create_from_file(test_file)
 
     def testFileParsesOK(self):
-        self.assertTrue(self.flight.valid)
         self.assertListEqual(self.flight.notes, [])
+        self.assertTrue(self.flight.valid)
 
     def testMetadataIsCorrectlyRead(self):
         self.assertEqual(self.flight.fr_manuf_code, 'LXN')
@@ -185,5 +200,5 @@ class TestNewZealandFlightParsing(unittest.TestCase):
         self.flight = igc_lib.Flight.create_from_file(test_file)
 
     def testFileParsesOK(self):
-        self.assertTrue(self.flight.valid)
         self.assertListEqual(self.flight.notes, [])
+        self.assertTrue(self.flight.valid)
