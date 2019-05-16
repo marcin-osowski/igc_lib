@@ -2,16 +2,27 @@
 
 Main abstraction defined in this file is the Flight class, which
 represents a parsed IGC file. A Flight is a collection of:
-    GNNSFix objects, one per B record in the original file,
-    IGC metadata, extracted from A/I/H records
-    a list of detected Thermals,
-    a list of detected Glides.
+    - GNNSFix objects, one per B record in the original file,
+    - IGC metadata, extracted from A/I/H records
+    - a list of detected Thermals,
+    - a list of detected Glides.
+
+A Flight is assumed to have one actual flight,
+from takeoff to landing. If it has zero then it will
+be invalid, i.e. `Flight.valid` will be False.
+
+If there's more than one actual flight in the IGC file then
+the `which_flight_to_pick` option in FlightParsingConfig
+will determine behavior.
 
 For example usage see the attached igc_lib_demo.py file. Please note
 that after creating a Flight instance you should always check for its
-validity via the `valid` attribute prior to using it, as many IGC
-records are broken.
+validity via the `Flight.valid` attribute prior to using it, as many
+IGC records are broken. See `Flight.notes` for details on why a file
+was considered broken.
 """
+
+from __future__ import print_function
 
 import collections
 import datetime
@@ -505,7 +516,7 @@ class FlightParsingConfig(object):
     min_avg_abs_alt_change = 0.01
 
     # Maximum altitude change per second between fixes, meters per second.
-    # Soft limit, some fixes are allowed to exceed."""
+    # Soft limit, some fixes are allowed to exceed.
     max_alt_change_rate = 50.0
 
     # Maximum number of fixes that exceed the altitude change limit.
@@ -518,11 +529,24 @@ class FlightParsingConfig(object):
     min_alt = -600.0
 
     #
-    # Thermals and flight detection parameters.
+    # Flight detection parameters.
     #
 
     # Minimum ground speed to switch to flight mode, km/h.
-    min_gsp_flight = 20.0
+    min_gsp_flight = 15.0
+
+    # In case there are multiple continuous segments with ground
+    # speed exceeding the limit, which one should be taken?
+    # Available options:
+    #   - "first": take the first segment, ignore the part after
+    #     the first detected landing.
+    #   - "concat": concatenate all segments; will include the down
+    #     periods between segments (legacy behavior)
+    which_flight_to_pick = "concat"
+
+    #
+    # Thermal detection parameters.
+    #
 
     # Minimum bearing change to enter a thermal, deg/sec.
     min_bearing_change_circling = 6.0
@@ -930,12 +954,12 @@ class Flight:
             # More likely to start the log standing, i.e. not in flight
             init_probs=[0.80, 0.20],
             transition_probs=[
-                [0.9926, 0.0074],  # transitions from standing
-                [0.0003, 0.9997],  # transitions from flying
+                [0.9995, 0.0005],  # transitions from standing
+                [0.0005, 0.9995],  # transitions from flying
             ],
             emission_probs=[
-                [0.974, 0.026],  # emissions from standing
-                [0.031, 0.969],  # emissions from flying
+                [0.8, 0.2],  # emissions from standing
+                [0.2, 0.8],  # emissions from flying
             ])
 
         output = decoder.decode(emissions)
@@ -958,6 +982,10 @@ class Flight:
                 takeoff_fix = fix
             if not fix.flying and was_flying:
                 landing_fix = fix
+                if self._config.which_flight_to_pick == "first":
+                    # User requested to select just the first flight in the log,
+                    # terminate now.
+                    break
             was_flying = fix.flying
 
         if takeoff_fix is None:
