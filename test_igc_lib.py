@@ -202,3 +202,43 @@ class TestNewZealandFlightParsing(unittest.TestCase):
     def testFileParsesOK(self):
         self.assertListEqual(self.flight.notes, [])
         self.assertTrue(self.flight.valid)
+
+
+class ParsePickFirst(igc_lib.FlightParsingConfig):
+    which_flight_to_pick = 'first'
+
+
+class ParsePickConcat(igc_lib.FlightParsingConfig):
+    which_flight_to_pick = 'concat'
+
+
+class TestWhichFlightToPick(unittest.TestCase):
+
+    def setUp(self):
+        self.test_file = 'testfiles/flight_with_middle_landing.igc'
+
+    def testFileParsesOKPickFirst(self):
+        flight = igc_lib.Flight.create_from_file(
+            self.test_file, config_class=ParsePickFirst)
+        self.assertListEqual(flight.notes, [])
+        self.assertTrue(flight.valid)
+
+    def testFileParsesOKPickConcat(self):
+        flight = igc_lib.Flight.create_from_file(
+            self.test_file, config_class=ParsePickConcat)
+        self.assertListEqual(flight.notes, [])
+        self.assertTrue(flight.valid)
+
+    def testConcatIsLongerThanFirst(self):
+        flight_first = igc_lib.Flight.create_from_file(
+            self.test_file, config_class=ParsePickFirst)
+        flight_concat = igc_lib.Flight.create_from_file(
+            self.test_file, config_class=ParsePickConcat)
+        # Takeoff is the same
+        self.assertEqual(
+            flight_first.takeoff_fix.timestamp,
+            flight_concat.takeoff_fix.timestamp)
+        # But landing is earlier
+        self.assertLess(
+            flight_first.landing_fix.timestamp,
+            flight_concat.landing_fix.timestamp)
