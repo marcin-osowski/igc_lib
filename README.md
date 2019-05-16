@@ -15,3 +15,5 @@ Example usage:
 ```
   python igc_lib_demo.py some_file.igc
 ```
+
+Should work both on Python 2.7 and on Python 3.
