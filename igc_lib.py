@@ -535,6 +535,11 @@ class FlightParsingConfig(object):
     # Minimum ground speed to switch to flight mode, km/h.
     min_gsp_flight = 15.0
 
+    # Minimum idle time (i.e. time with speed below min_gsp_flight) to switch
+    # to landing, seconds. Exception: end of the file (tail fixes that
+    # do not trigger the above condition), no limit is applied there.
+    min_landing_time = 5.0 * 60.0
+
     # In case there are multiple continuous segments with ground
     # speed exceeding the limit, which one should be taken?
     # Available options:
@@ -948,7 +953,14 @@ class Flight:
         return emissions
 
     def _compute_flight(self):
-        """Adds boolean flag .flying to self.fixes."""
+        """Adds boolean flag .flying to self.fixes.
+
+        Two pass:
+          1. Viterbi decoder
+          2. Only emit landings (0) if the downtime is more than
+             _config.min_landing_time (or it's the end of the log).
+        """
+        # Step 1: the Viterbi decoder
         emissions = self._flying_emissions()
         decoder = viterbi.SimpleViterbiDecoder(
             # More likely to start the log standing, i.e. not in flight
@@ -962,10 +974,51 @@ class Flight:
                 [0.2, 0.8],  # emissions from flying
             ])
 
-        output = decoder.decode(emissions)
+        outputs = decoder.decode(emissions)
 
-        for fix, output in zip(self.fixes, output):
-            fix.flying = (output == 1)
+        # Step 2: apply _config.min_landing_time.
+        ignore_next_downtime = False
+        apply_next_downtime = False
+        for i, (fix, output) in enumerate(zip(self.fixes, outputs)):
+            if output == 1:
+                fix.flying = True
+                # We're in flying mode, therefore reset all expectations
+                # about what's happening in the next down mode.
+                ignore_next_downtime = False
+                apply_next_downtime = False
+            else:
+                if apply_next_downtime or ignore_next_downtime:
+                    if apply_next_downtime:
+                        fix.flying = False
+                    else:
+                        fix.flying = True
+                else:
+                    # We need to determine whether to apply_next_downtime
+                    # or to ignore_next_downtime. This requires a scan into
+                    # upcoming fixes. Find the next fix on which
+                    # the Viterbi decoder said "flying".
+                    j = i + 1
+                    while j < len(self.fixes):
+                        upcoming_fix_decoded = outputs[j]
+                        if upcoming_fix_decoded == 1:
+                            break
+                        j += 1
+
+                    if j == len(self.fixes):
+                        # No such fix, end of log. Then apply.
+                        apply_next_downtime = True
+                        fix.flying = False
+                    else:
+                        # Found next flying fix.
+                        upcoming_fix = self.fixes[j]
+                        upcoming_fix_time_ahead = upcoming_fix.rawtime - fix.rawtime
+                        # If it's far enough into the future of then apply.
+                        if upcoming_fix_time_ahead >= self._config.min_landing_time:
+                            apply_next_downtime = True
+                            fix.flying = False
+                        else:
+                            ignore_next_downtime = True
+                            fix.flying = True
 
     def _compute_takeoff_landing(self):
         """Finds the takeoff and landing fixes in the log.
