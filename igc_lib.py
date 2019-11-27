@@ -284,7 +284,7 @@ class GNSSFix:
             + '(\d\d)(\d\d)(\d\d\d)([NS])'
             + '(\d\d\d)(\d\d)(\d\d\d)([EW])'
             + '([AV])' + '([-\d]\d\d\d\d)' + '([-\d]\d\d\d\d)'
-            + '([0-9a-zA-Z]*).*$', B_record_line)
+            + '([0-9a-zA-Z\-]*).*$', B_record_line)
         if match is None:
             return None
         (hours, minutes, seconds,
