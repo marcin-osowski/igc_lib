@@ -342,9 +342,9 @@ class GNSSFix:
 
     def __str__(self):
         return (
-            "GNSSFix(rawtime=%02d:%02d:%02d, lat=%f, lon=%f, altitide=%.1f)" %
+            "GNSSFix(rawtime=%02d:%02d:%02d, lat=%f, lon=%f, press_alt=%.1f, gnss_alt=%.1f)" %
             (_rawtime_float_to_hms(self.rawtime) +
-             (self.lat, self.lon, self.alt)))
+             (self.lat, self.lon, self.press_alt, self.gnss_alt)))
 
     def bearing_to(self, other):
         """Computes bearing in degrees to another GNSSFix."""
