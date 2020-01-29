@@ -460,7 +460,7 @@ class Glide:
 
     def alt_change(self):
         """Return the overall altitude change in the glide, meters."""
-        return self.enter_fix.alt - self.exit_fix.alt
+        return self.exit_fix.alt - self.enter_fix.alt
 
     def glide_ratio(self):
         """Returns the L/D of the glide."""
