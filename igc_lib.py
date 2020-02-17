@@ -978,7 +978,7 @@ class Flight:
 
         # Step 2: apply _config.min_landing_time.
         ignore_next_downtime = False
-        apply_next_downtime = False
+        apply_next_downtime = True
         for i, (fix, output) in enumerate(zip(self.fixes, outputs)):
             if output == 1:
                 fix.flying = True
